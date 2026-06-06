@@ -1,0 +1,8 @@
+# Input capture files (large, user-specific)
+*.html
+
+# Screenshots (generated)
+*.png
+
+# Any temp/debug scripts
+debug-*.ts
