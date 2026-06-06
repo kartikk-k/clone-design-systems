@@ -141,6 +141,7 @@ function renderNode(node: any, parentX: number, parentY: number, depth: number, 
   if (node.attributes?.id && SKIP_IDS.has(node.attributes.id)) return "";
   if (styles.display === "none") return "";
   if (styles.visibility === "hidden") return "";
+  if (styles.opacity === "0") return "";
 
   // Skip zero-size elements
   if (rect && rect.width === 0 && rect.height === 0) return "";
@@ -194,6 +195,18 @@ function renderNode(node: any, parentX: number, parentY: number, depth: number, 
     cssProps.push(`${kebab}: ${value}`);
   }
 
+  // Contrast fix: if element has a light/opaque background but no explicit text color,
+  // and the inherited color would be light (white text on white bg), set text to dark.
+  const bg = styles.backgroundColor;
+  const hasExplicitColor = styles.color && styles.color !== bodyColor;
+  if (bg && !hasExplicitColor) {
+    const bgLight = isLightColor(bg);
+    const inheritedLight = isLightColor(bodyColor);
+    if (bgLight && inheritedLight) {
+      cssProps.push(`color: rgb(0, 0, 0)`);
+    }
+  }
+
   const style = cssProps.join("; ");
 
   // Handle images
@@ -232,6 +245,21 @@ function esc(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function isLightColor(color: string): boolean {
+  if (!color) return false;
+  // Parse rgb(r, g, b) or rgba(r, g, b, a)
+  const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (!m) return color === "white" || color === "rgb(255, 255, 255)";
+  const r = parseInt(m[1]!);
+  const g = parseInt(m[2]!);
+  const b = parseInt(m[3]!);
+  // Check alpha — if mostly transparent, not "light"
+  const aMatch = color.match(/,\s*([\d.]+)\s*\)/);
+  if (aMatch && parseFloat(aMatch[1]!) < 0.5) return false;
+  // Luminance check
+  return (r * 299 + g * 587 + b * 114) / 1000 > 180;
+}
+
 // ─── Build page ─────────────────────────────────
 
 const bodyNode = data.root.childNodes?.find((n: any) => n.tag === "BODY");
@@ -266,6 +294,8 @@ const output = `<!DOCTYPE html>
     }
     img { display: block; }
     a { color: inherit; text-decoration: inherit; }
+    button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; appearance: none; }
+    input, select, textarea { background: none; border: none; color: inherit; font: inherit; appearance: none; }
   </style>
 </head>
 <body>
