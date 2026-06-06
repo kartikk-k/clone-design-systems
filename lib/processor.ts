@@ -7,6 +7,7 @@ export interface ProcessedChunk {
   html: string;
   react: string;
   sourceFrame: string;
+  dataNames: string[];
 }
 
 export interface SectionToFetch {
@@ -272,10 +273,19 @@ export async function processRawData(
       continue;
     }
 
+    // Extract all data-name values from the raw React code
+    const dataNames: string[] = [];
+    const dnRegex = /data-name="([^"]*)"/g;
+    let dnMatch;
+    while ((dnMatch = dnRegex.exec(reactCode)) !== null) {
+      dataNames.push(dnMatch[1]!);
+    }
+
     chunks.push({
       name: sectionKey,
       html,
       react: cleanReact,
+      dataNames,
       sourceFrame: sectionKey,
     });
 

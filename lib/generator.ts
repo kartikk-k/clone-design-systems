@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readdir } from "node:fs/promises";
 import { info, success } from "./cli.ts";
 import type { ProcessedChunk } from "./processor.ts";
+import { analyze, type DesignAnalysis, type AnalyzedSection } from "./analyzer.ts";
 
 export async function generateDesignFile(
   dataDir: string,
@@ -15,458 +16,316 @@ export async function generateDesignFile(
     files = [];
   }
 
-  // Load React source files for code extraction
   const jsxFiles = files.filter((f: string) => f.endsWith(".jsx"));
   const htmlFiles = files.filter(
     (f: string) => f.endsWith(".html") && !f.startsWith("_")
   );
   info(`Analyzing ${jsxFiles.length} React + ${htmlFiles.length} HTML file(s)...`);
 
-  const sections: { name: string; react: string; html: string }[] = [];
-
+  // Load chunks with data from saved files
+  const chunks: ProcessedChunk[] = [];
   for (const file of jsxFiles) {
     const react = await Bun.file(join(htmlDir, file)).text();
+    const name = file.replace(".jsx", "");
     const htmlFile = file.replace(".jsx", ".html");
     let html = "";
     try {
       html = await Bun.file(join(htmlDir, htmlFile)).text();
     } catch {}
-    sections.push({
-      name: file.replace(".jsx", ""),
-      react,
-      html,
-    });
+
+    // Re-extract data-names from the react code
+    const dataNames: string[] = [];
+    const dnRegex = /data-name="([^"]*)"/g;
+    let m;
+    while ((m = dnRegex.exec(react)) !== null) {
+      dataNames.push(m[1]!);
+    }
+
+    chunks.push({ name, react, html, dataNames, sourceFrame: name });
   }
 
-  const allReact = sections.map((s) => s.react).join("\n");
-  const allHtml = sections.map((s) => s.html).join("\n");
+  if (chunks.length === 0) {
+    await Bun.write(
+      join(dataDir, "design.md"),
+      `# Design System: ${siteName}\n\n_No section data available._\n`
+    );
+    return;
+  }
 
-  const md = buildDesignMd(siteName, dataDir, allReact, allHtml, sections);
+  // Run the semantic analyzer
+  const analysis = analyze(chunks);
+
+  // Render the design.md
+  const md = renderDesignMd(siteName, analysis);
   await Bun.write(join(dataDir, "design.md"), md);
-  success(`design.md written (${md.length} chars)`);
+  success(`design.md written (${md.length} chars, ${md.split("\n").length} lines)`);
 }
 
-function buildDesignMd(
-  siteName: string,
-  dataDir: string,
-  allReact: string,
-  allHtml: string,
-  sections: { name: string; react: string; html: string }[]
-): string {
+function renderDesignMd(siteName: string, a: DesignAnalysis): string {
   const l: string[] = [];
 
   l.push(`# Design System: ${siteName}`);
   l.push("");
   l.push("> Auto-extracted from Figma via Design System Clone");
-  l.push("> Open `html/_full-page.html` in a browser to preview the full page");
+  l.push("> Preview: open `html/_full-page.html` in a browser");
   l.push("");
 
-  // ── 1. Colors ──
-  l.push("## 1. Colors");
+  // ── Design Language ──
+  l.push("## Design Language");
+  l.push("");
+  l.push(a.designLanguage);
   l.push("");
 
-  const colors = extractColors(allReact);
-  const textColors = colors.filter((c) => c.contexts.includes("text"));
-  const bgColors = colors.filter((c) => c.contexts.includes("background"));
-  const borderColors = colors.filter((c) => c.contexts.includes("border"));
-  const otherColors = colors.filter(
-    (c) => !c.contexts.includes("text") && !c.contexts.includes("background") && !c.contexts.includes("border")
-  );
+  // ── Dos and Don'ts ──
+  l.push("## Dos and Don'ts");
+  l.push("");
+  l.push("### DO");
+  l.push("");
+  l.push("- Use the EXACT hex color values listed below — never approximate or use standard Tailwind color classes (`text-blue-500`)");
+  l.push("- Use the EXACT font families listed in Typography — copy the `font-['...']` class string as-is");
+  l.push("- Use the EXACT border-radius values from Border Radius — do not round to `rounded-md` or `rounded-lg`");
+  l.push("- Use the EXACT font sizes, line-heights, and letter-spacing from the Type Scale recipes");
+  l.push("- Use Tailwind arbitrary values (`text-[16px]`, `rounded-[4px]`, `gap-[24px]`) to match the design system precisely");
+  l.push("- Match the spacing scale values for padding, margin, and gaps");
+  l.push("- Reference the Section layouts for how to structure page sections");
+  l.push("- Use the button component code as-is — just change the label text");
+  l.push("");
+  l.push("### DON'T");
+  l.push("");
+  l.push("- Don't use generic Tailwind utilities (`text-sm`, `rounded-lg`, `text-gray-500`) — always use the exact arbitrary values");
+  l.push("- Don't substitute fonts — if the design uses `sohne-var`, don't use `Inter` unless the fallback mapping says so");
+  l.push("- Don't invent new color shades — stick to the palette");
+  l.push("- Don't change border-radius values — if buttons use `rounded-[4px]`, don't use `rounded-md`");
+  l.push("- Don't add shadows that aren't in the shadow list");
+  l.push("- Don't guess spacing — use values from the spacing scale");
+  l.push("- Don't mix design languages — if the site is minimal/flat, don't add gradients or heavy shadows");
+  l.push("- Don't change letter-spacing or line-height — these define the typographic feel");
+  l.push("");
 
-  if (textColors.length > 0) {
-    l.push("### Text Colors");
-    l.push("");
-    l.push("| Value | Count | Notes |");
+  // ── Colors ──
+  l.push("## Color Palette");
+  l.push("");
+  if (a.colors.length > 0) {
+    l.push("| Token | Value | Usage |");
     l.push("|-------|-------|-------|");
-    for (const c of textColors.slice(0, 15)) {
-      l.push(`| \`${c.value}\` | ${c.count}x | ${c.count > 50 ? "primary text" : c.count > 10 ? "secondary text" : "accent"} |`);
+    for (const c of a.colors) {
+      l.push(`| \`${c.token}\` | \`${c.value}\` | ${c.usage} |`);
+    }
+  } else {
+    l.push("_No colors detected._");
+  }
+  l.push("");
+
+  // ── Typography ──
+  l.push("## Typography");
+  l.push("");
+
+  l.push("### Font Stack");
+  l.push("");
+  for (const f of a.typography.fonts) {
+    const cssName = figmaFontToCss(f.name);
+    l.push(`- **${f.name}** → CSS: \`${cssName}\` (${f.count}x)`);
+  }
+  l.push("");
+  const primaryCssFont = figmaFontToCss(a.typography.fonts[0]?.name ?? "");
+  l.push("**Font rendering note:** Figma font names (e.g., `sohne-var:Light`) map to CSS font-family values. When using Tailwind, use the CSS mapping shown above. Example: `font-family: " + primaryCssFont + "`. If the font is proprietary, use the closest web-safe alternative.");
+  l.push("");
+
+  if (a.typography.scale.length > 0) {
+    l.push("### Type Scale");
+    l.push("");
+    l.push("| Level | Size | Font | Weight | Line Height | Tracking | Color |");
+    l.push("|-------|------|------|--------|-------------|----------|-------|");
+    for (const t of a.typography.scale) {
+      l.push(
+        `| **${t.level}** | ${t.size} | ${t.font || "-"} | ${t.weight || "-"} | ${t.lineHeight || "-"} | ${t.tracking || "-"} | ${t.color || "-"} |`
+      );
     }
     l.push("");
-  }
 
-  if (bgColors.length > 0) {
-    l.push("### Background Colors");
+    l.push("### Heading & Text Recipes");
     l.push("");
-    l.push("| Value | Count |");
-    l.push("|-------|-------|");
-    for (const c of bgColors.slice(0, 15)) {
-      l.push(`| \`${c.value}\` | ${c.count}x |`);
+    l.push("Copy-paste these class strings to match the exact typography:");
+    l.push("");
+    for (const t of a.typography.scale) {
+      if (t.recipe) {
+        l.push(`**${t.level}:**`);
+        l.push("```");
+        l.push(t.recipe);
+        l.push("```");
+        l.push("");
+      }
     }
-    l.push("");
   }
 
-  if (borderColors.length > 0) {
-    l.push("### Border Colors");
-    l.push("");
-    l.push("| Value | Count |");
-    l.push("|-------|-------|");
-    for (const c of borderColors.slice(0, 10)) {
-      l.push(`| \`${c.value}\` | ${c.count}x |`);
-    }
-    l.push("");
-  }
-
-  // ── 2. Typography ──
-  l.push("## 2. Typography");
+  // ── Buttons ──
+  l.push("## Buttons");
   l.push("");
-
-  const fonts = extractPattern(allReact, /font-\['([^']+)'\]/g);
-  const fontSizes = extractPattern(allReact, /text-\[(\d+(?:\.\d+)?px)\]/g);
-  const lineHeights = extractPattern(allReact, /leading-\[([^\]]+)\]/g);
-  const tracking = extractPattern(allReact, /tracking-\[([^\]]+)\]/g);
-
-  l.push("### Font Families");
-  l.push("");
-  for (const [font, count] of fonts.slice(0, 10)) {
-    l.push(`- \`${font}\` (${count}x)`);
-  }
-  l.push("");
-
-  l.push("### Font Size Scale");
-  l.push("");
-  const sortedSizes = fontSizes.sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
-  l.push("| Size | Count | Likely usage |");
-  l.push("|------|-------|-------------|");
-  for (const [size, count] of sortedSizes) {
-    const px = parseFloat(size);
-    const usage = px >= 48 ? "Display / Hero" : px >= 32 ? "H1" : px >= 24 ? "H2" : px >= 20 ? "H3" : px >= 16 ? "Body" : px >= 14 ? "Body small / Nav" : px >= 12 ? "Caption / Label" : "Fine print";
-    l.push(`| \`${size}\` | ${count}x | ${usage} |`);
-  }
-  l.push("");
-
-  if (lineHeights.length > 0) {
-    l.push("### Line Heights");
-    l.push("");
-    for (const [lh, count] of lineHeights.slice(0, 12)) {
-      l.push(`- \`${lh}\` (${count}x)`);
-    }
-    l.push("");
-  }
-
-  if (tracking.length > 0) {
-    l.push("### Letter Spacing");
-    l.push("");
-    for (const [t, count] of tracking) {
-      l.push(`- \`${t}\` (${count}x)`);
-    }
-    l.push("");
-  }
-
-  // ── 3. Buttons ──
-  l.push("## 3. Buttons");
-  l.push("");
-
-  const buttons = extractButtons(allReact);
-  if (buttons.length > 0) {
-    for (const btn of buttons) {
+  if (a.buttons.length > 0) {
+    for (const btn of a.buttons) {
       l.push(`### ${btn.variant}`);
       l.push("");
+      l.push(btn.description);
+      l.push(`Example text: "${btn.textExample}"`);
+      l.push("");
       l.push("```jsx");
-      l.push(btn.code);
+      l.push(btn.recipe);
       l.push("```");
       l.push("");
     }
   } else {
-    l.push("_No distinct button patterns detected._");
+    l.push("_No distinct button patterns detected. Check individual section JSX files._");
+  }
+  l.push("");
+
+  // ── Layout ──
+  l.push("## Layout System");
+  l.push("");
+  l.push(`- **Container max-width:** \`${a.layout.containerMaxWidth}\``);
+  l.push(`- **Container padding:** \`${a.layout.containerPadding}\``);
+  if (a.layout.sectionSpacing.length > 0) {
+    l.push(`- **Section spacing:** ${a.layout.sectionSpacing.map((s) => `\`${s}\``).join(", ")}`);
+  }
+  l.push("");
+
+  if (a.layout.borderRadius.length > 0) {
+    l.push("### Border Radius");
+    l.push("");
+    for (const r of a.layout.borderRadius) {
+      l.push(`- \`${r.value}\` — ${r.usage}`);
+    }
     l.push("");
   }
 
-  // ── 4. Spacing ──
-  l.push("## 4. Spacing Scale");
-  l.push("");
-
-  const spacing = extractSpacing(allReact);
-  if (spacing.length > 0) {
-    l.push("| Value | Count |");
-    l.push("|-------|-------|");
-    for (const [val, count] of spacing.slice(0, 25)) {
-      l.push(`| \`${val}\` | ${count}x |`);
-    }
-  }
-  l.push("");
-
-  // ── 5. Border Radius ──
-  l.push("## 5. Border Radius");
-  l.push("");
-
-  const radii = extractPattern(allReact, /rounded-\[([^\]]+)\]/g);
-  const namedRadii = extractPattern(allReact, /rounded-(none|sm|md|lg|xl|2xl|3xl|full|[0-9]+)/g);
-  const allRadii = [...radii, ...namedRadii].sort((a, b) => b[1] - a[1]);
-  if (allRadii.length > 0) {
-    for (const [val, count] of allRadii) {
-      l.push(`- \`${val}\` (${count}x)`);
-    }
-  }
-  l.push("");
-
-  // ── 6. Shadows ──
-  l.push("## 6. Shadows");
-  l.push("");
-
-  const shadows = extractPattern(allReact, /shadow-\[([^\]]+)\]/g);
-  const dropShadows = extractPattern(allReact, /drop-shadow-\[([^\]]+)\]/g);
-  const allShadows = [...shadows, ...dropShadows];
-  if (allShadows.length > 0) {
-    for (const [val, count] of allShadows) {
-      l.push(`- \`${val}\` (${count}x)`);
-    }
-  } else {
-    l.push("_No shadows detected._");
-  }
-  l.push("");
-
-  // ── 7. Section-by-Section Layout ──
-  l.push("## 7. Section Layouts");
-  l.push("");
-  l.push("Each section's complete React+Tailwind code is below. These are pixel-perfect");
-  l.push("reproductions from the Figma design — use them as reference for layout patterns,");
-  l.push("component structure, spacing, and visual hierarchy.");
-  l.push("");
-
-  for (const section of sections) {
-    const sectionLabel = section.name.replace(/^section-/, "");
-    const componentName = extractComponentName(section.react);
-
-    l.push(`### ${componentName || sectionLabel}`);
+  if (a.layout.shadows.length > 0) {
+    l.push("### Shadows");
     l.push("");
+    for (const s of a.layout.shadows) {
+      l.push(`- \`${s}\``);
+    }
+    l.push("");
+  }
 
-    // Extract a brief summary: text content, key classes
-    const textContent = extractTextContent(section.react);
-    if (textContent.length > 0) {
-      l.push("**Key text:** " + textContent.slice(0, 5).map((t) => `"${t}"`).join(", "));
-      if (textContent.length > 5) l.push(`  _(+${textContent.length - 5} more)_`);
-      l.push("");
+  // ── Section Reference ──
+  l.push("## Section Reference");
+  l.push("");
+  l.push("Each section's role and key design patterns:");
+  l.push("");
+
+  for (const section of a.sections) {
+    const label = sectionTypeLabel(section.type);
+    l.push(`### ${label}`);
+    l.push("");
+    l.push(`**Type:** ${section.type}`);
+    if (section.bgColor) {
+      l.push(`**Background:** \`${section.bgColor}\`${section.isDark ? " (dark)" : ""}`);
     }
 
-    // Include the React code
-    l.push("<details>");
-    l.push(`<summary>React + Tailwind code (${section.react.length} chars)</summary>`);
+    // Key text content
+    if (section.textContent.length > 0) {
+      const preview = section.textContent.slice(0, 5);
+      l.push(`**Key text:** ${preview.map((t) => `"${t.length > 50 ? t.slice(0, 47) + "..." : t}"`).join(", ")}`);
+    }
+
+    // Key component types found
+    const componentTypes = identifyComponents(section.dataNames);
+    if (componentTypes.length > 0) {
+      l.push(`**Components:** ${componentTypes.join(", ")}`);
+    }
+
+    l.push("");
+    l.push(`<details><summary>Full JSX (${section.react.length} chars) → html/${section.name}.jsx</summary>`);
     l.push("");
     l.push("```jsx");
-    // Truncate very large sections to keep the MD manageable
-    if (section.react.length > 15000) {
-      l.push(section.react.slice(0, 15000));
-      l.push(`\n// ... truncated (${section.react.length - 15000} chars remaining)`);
-      l.push(`// See full code in html/${section.name}.jsx`);
+    if (section.react.length > 20000) {
+      l.push(section.react.slice(0, 20000));
+      l.push(`// ... truncated. See html/${section.name}.jsx for full source.`);
     } else {
       l.push(section.react);
     }
     l.push("```");
-    l.push("");
     l.push("</details>");
     l.push("");
   }
 
-  // ── 8. Component Patterns ──
-  l.push("## 8. Component Patterns");
-  l.push("");
-  l.push("### Navigation");
-  l.push("");
-
-  const navPatterns = extractNavPatterns(allReact);
-  if (navPatterns.length > 0) {
-    l.push("```jsx");
-    l.push(navPatterns);
-    l.push("```");
-  } else {
-    l.push("_See Header section above for nav patterns._");
-  }
-  l.push("");
-
-  l.push("### Cards");
-  l.push("");
-  const cardPatterns = extractCardPatterns(allReact);
-  if (cardPatterns.length > 0) {
-    for (const card of cardPatterns.slice(0, 3)) {
-      l.push("```jsx");
-      l.push(card);
-      l.push("```");
-      l.push("");
-    }
-  } else {
-    l.push("_See section layouts above for card patterns._");
-  }
-  l.push("");
-
-  // ── 9. Files Reference ──
-  l.push("## 9. Files");
+  // ── Files ──
+  l.push("## Files");
   l.push("");
   l.push("| File | Description |");
   l.push("|------|-------------|");
   l.push("| `html/_full-page.html` | Full page preview (open in browser) |");
-  for (const s of sections) {
-    l.push(`| \`html/${s.name}.jsx\` | React source for ${extractComponentName(s.react) || s.name} |`);
-    l.push(`| \`html/${s.name}.html\` | HTML+Tailwind for ${extractComponentName(s.react) || s.name} |`);
+  for (const s of a.sections) {
+    l.push(`| \`html/${s.name}.jsx\` | ${sectionTypeLabel(s.type)} React source |`);
   }
   l.push("");
 
   return l.join("\n");
 }
 
-// ─── Extraction helpers ───
+function figmaFontToCss(figmaName: string): string {
+  if (!figmaName) return "system-ui, sans-serif";
+  // Split "FontName:Weight" format
+  const [family, weight] = figmaName.split(":");
+  if (!family) return "system-ui, sans-serif";
 
-interface ColorInfo {
-  value: string;
-  count: number;
-  contexts: string[];
-}
+  const familyLower = family.toLowerCase().replace(/_/g, " ");
 
-function extractColors(code: string): ColorInfo[] {
-  const colors = new Map<string, { count: number; contexts: Set<string> }>();
+  // Known mappings
+  const mappings: Record<string, string> = {
+    "sohne-var": "'Sohne', 'Inter', system-ui, sans-serif",
+    "sohne": "'Sohne', 'Inter', system-ui, sans-serif",
+    "sf pro display": "'Inter', system-ui, sans-serif",
+    "sf pro text": "'Inter', system-ui, sans-serif",
+    "sf mono": "'SF Mono', 'Fira Code', 'Consolas', monospace",
+    "geist": "'Geist', 'Inter', system-ui, sans-serif",
+    "geistmonofont": "'Geist Mono', 'Fira Code', monospace",
+    "inter": "'Inter', system-ui, sans-serif",
+    "openai sans": "'OpenAI Sans', 'Inter', system-ui, sans-serif",
+    "openai_sans": "'OpenAI Sans', 'Inter', system-ui, sans-serif",
+    "cousine": "'Cousine', 'Courier New', monospace",
+    "georgia": "'Georgia', serif",
+    "times": "'Times New Roman', serif",
+    "arial": "'Arial', sans-serif",
+    "helvetica": "'Helvetica', 'Arial', sans-serif",
+  };
 
-  const regex = /(?:text|bg|border|from|to|via)-\[#([0-9a-fA-F]{3,8})\]/g;
-  let m;
-  while ((m = regex.exec(code)) !== null) {
-    const color = `#${m[1]!.toLowerCase()}`;
-    const ctx = m[0]!.startsWith("text-")
-      ? "text"
-      : m[0]!.startsWith("bg-")
-        ? "background"
-        : m[0]!.startsWith("border-")
-          ? "border"
-          : "gradient";
-    const entry = colors.get(color) ?? { count: 0, contexts: new Set() };
-    entry.count++;
-    entry.contexts.add(ctx);
-    colors.set(color, entry);
+  for (const [key, value] of Object.entries(mappings)) {
+    if (familyLower.startsWith(key)) return value;
   }
 
-  // Named colors
-  const named = /(?:text|bg|border)-(white|black)\b/g;
-  while ((m = named.exec(code)) !== null) {
-    const color = m[1]!;
-    const entry = colors.get(color) ?? { count: 0, contexts: new Set() };
-    entry.count++;
-    colors.set(color, entry);
+  // Default: use the family name directly
+  return `'${family}', system-ui, sans-serif`;
+}
+
+function sectionTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    navigation: "Navigation",
+    hero: "Hero",
+    "logo-bar": "Logo Bar / Social Proof",
+    stats: "Stats / Metrics",
+    "feature-grid": "Feature Grid",
+    testimonials: "Testimonials",
+    cta: "Call to Action",
+    footer: "Footer",
+    content: "Content Section",
+  };
+  return labels[type] ?? "Section";
+}
+
+function identifyComponents(dataNames: string[]): string[] {
+  const types = new Set<string>();
+  for (const name of dataNames) {
+    if (/^Button$/i.test(name)) types.add("Button");
+    if (/^Link/i.test(name)) types.add("Link");
+    if (/^Heading/i.test(name)) types.add("Heading");
+    if (/^Paragraph/i.test(name)) types.add("Paragraph");
+    if (/NavigationMenu/i.test(name)) types.add("NavigationMenu");
+    if (/ButtonGroup/i.test(name)) types.add("ButtonGroup");
+    if (/CustomerLogo/i.test(name)) types.add("CustomerLogo");
+    if (/Carousel/i.test(name)) types.add("Carousel");
+    if (/TestimonialCard/i.test(name)) types.add("TestimonialCard");
+    if (/Icon/i.test(name) && !types.has("Icon")) types.add("Icon");
+    if (/Image/i.test(name) && !types.has("Image")) types.add("Image");
   }
-
-  return [...colors.entries()]
-    .map(([value, info]) => ({
-      value,
-      count: info.count,
-      contexts: [...info.contexts],
-    }))
-    .sort((a, b) => b.count - a.count);
-}
-
-function extractPattern(code: string, regex: RegExp): [string, number][] {
-  const counts = new Map<string, number>();
-  let m;
-  while ((m = regex.exec(code)) !== null) {
-    const val = m[1]!;
-    counts.set(val, (counts.get(val) ?? 0) + 1);
-  }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-}
-
-function extractSpacing(code: string): [string, number][] {
-  const regex =
-    /(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap)-\[([^\]]+)\]/g;
-  const counts = new Map<string, number>();
-  let m;
-  while ((m = regex.exec(code)) !== null) {
-    counts.set(m[1]!, (counts.get(m[1]!) ?? 0) + 1);
-  }
-  return [...counts.entries()].sort((a, b) => {
-    const an = parseFloat(a[0]);
-    const bn = parseFloat(b[0]);
-    if (!isNaN(an) && !isNaN(bn)) return an - bn;
-    return a[0].localeCompare(b[0]);
-  });
-}
-
-interface ButtonInfo {
-  variant: string;
-  code: string;
-}
-
-function extractButtons(code: string): ButtonInfo[] {
-  const buttons: ButtonInfo[] = [];
-  const seen = new Set<string>();
-
-  // Find elements with bg + rounded + text content (button-like patterns)
-  const btnRegex =
-    /<div\s+className="([^"]*bg-\[[^\]]+\][^"]*rounded[^"]*)"[^>]*>([\s\S]*?)<\/div>/g;
-  let m;
-  while ((m = btnRegex.exec(code)) !== null) {
-    const classes = m[1]!;
-    const inner = m[2]!;
-
-    // Must have text content
-    const textMatch = inner.match(
-      /<p[^>]*>([\s\S]*?)<\/p>/
-    );
-    if (!textMatch) continue;
-    const text = textMatch[1]!.replace(/<[^>]+>/g, "").trim();
-    if (!text || text.length > 40 || text.length < 2) continue;
-
-    // Dedupe by class signature
-    const sig = classes.replace(/w-\[[^\]]+\]/g, "").replace(/h-\[[^\]]+\]/g, "");
-    if (seen.has(sig)) continue;
-    seen.add(sig);
-
-    // Determine variant
-    let variant = "Button";
-    if (classes.includes("bg-[#") && !classes.includes("bg-[#fff") && !classes.includes("bg-[#FFF") && !classes.includes("bg-white")) {
-      variant = `Primary — "${text}"`;
-    } else if (classes.includes("border") && !classes.includes("bg-[#")) {
-      variant = `Outline — "${text}"`;
-    } else {
-      variant = `Button — "${text}"`;
-    }
-
-    const snippet = `<div className="${classes}">\n  <p>...</p>\n  {/* text: "${text}" */}\n</div>`;
-    buttons.push({ variant, code: snippet });
-
-    if (buttons.length >= 8) break;
-  }
-
-  return buttons;
-}
-
-function extractComponentName(react: string): string {
-  const m = react.match(
-    /(?:export\s+default\s+)?function\s+(\w+)/
-  );
-  return m ? m[1]! : "";
-}
-
-function extractTextContent(react: string): string[] {
-  const texts: string[] = [];
-  const regex = /<p[^>]*>\s*([^<{][^<]*?)\s*<\/p>/g;
-  let m;
-  while ((m = regex.exec(react)) !== null) {
-    const text = m[1]!.trim();
-    if (text.length >= 3 && text.length <= 80) {
-      texts.push(text.length > 60 ? text.slice(0, 57) + "..." : text);
-    }
-  }
-  return [...new Set(texts)];
-}
-
-function extractNavPatterns(react: string): string {
-  // Find NavigationMenu or Header-like components
-  const navMatch = react.match(
-    /function\s+(?:Header|Navigation\w*|Nav\w*)\s*\([^)]*\)\s*\{[\s\S]*?return\s*\(\s*([\s\S]*?)\s*\)\s*;?\s*\}/
-  );
-  if (navMatch) {
-    const code = navMatch[0]!;
-    return code.length > 5000 ? code.slice(0, 5000) + "\n// ... truncated" : code;
-  }
-  return "";
-}
-
-function extractCardPatterns(react: string): string[] {
-  const cards: string[] = [];
-  // Find div patterns with shadow + rounded + padding (card-like)
-  const cardRegex =
-    /<div\s+className="([^"]*shadow[^"]*rounded[^"]*)"[^>]*>[\s\S]*?<\/div>\s*<\/div>/g;
-  let m;
-  while ((m = cardRegex.exec(react)) !== null) {
-    if (m[0]!.length < 5000 && m[0]!.length > 100) {
-      cards.push(m[0]!.slice(0, 3000));
-    }
-    if (cards.length >= 3) break;
-  }
-  return cards;
+  return [...types];
 }
