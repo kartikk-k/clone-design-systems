@@ -1,706 +1,185 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Design Grab</title>
+  <title>Design Grab — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Inter", "Helvetica Neue", sans-serif;
+    }
+  </style>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg-page: rgb(20, 20, 20);
-      --bg-card: rgb(24, 24, 24);
-      --bg-surface: rgb(51, 51, 51);
-      --text-primary: rgba(229, 229, 229, 0.94);
-      --text-secondary: rgba(229, 229, 229, 0.7);
-      --text-muted: rgba(229, 229, 229, 0.48);
-      --text-faint: rgba(229, 229, 229, 0.32);
-      --border-default: rgba(229, 229, 229, 0.08);
-      --border-subtle: rgba(229, 229, 229, 0.12);
-      --brand-accent: rgb(63, 162, 102);
-      --brand-accent-soft: rgba(63, 162, 102, 0.12);
-      --bg-primary-button: rgb(228, 228, 228);
-      --text-on-primary: rgb(25, 28, 34);
-      --red-error: rgb(220, 38, 38);
-    }
-
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: var(--bg-page);
-      color: var(--text-primary);
-      font-size: 13px;
-      line-height: 18px;
-      min-height: 100vh;
-    }
-
-    /* ─── Layout ─────────────────────────── */
-
-    .shell {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      width: 240px;
-      min-width: 240px;
-      border-right: 0.5px solid var(--border-default);
-      display: flex;
-      flex-direction: column;
-      padding: 16px 8px;
-      gap: 4px;
-      overflow-y: auto;
-      position: sticky;
-      top: 0;
-      height: 100vh;
-    }
-
-    .sidebar-header {
-      padding: 0 8px;
-      margin-bottom: 12px;
-    }
-
-    .sidebar-header h1 {
-      font-size: 13px;
-      font-weight: 400;
-      color: var(--text-secondary);
-      letter-spacing: -0.08px;
-    }
-
-    .sidebar-header .badge {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      background: rgba(229, 229, 229, 0.06);
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-top: 4px;
-      display: inline-block;
-    }
-
-    .sidebar-section-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
-      padding: 12px 8px 6px 8px;
-    }
-
-    .site-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      height: 32px;
-      padding: 0 8px;
-      border-radius: 6px;
-      color: var(--text-secondary);
-      text-decoration: none;
-      cursor: pointer;
-      border: none;
-      background: none;
-      font: inherit;
-      width: 100%;
-      text-align: left;
-      transition: background 0.1s;
-    }
-
-    .site-item:hover {
-      background: rgba(229, 229, 229, 0.06);
-      color: var(--text-primary);
-    }
-
-    .site-item.active {
-      background: rgba(229, 229, 229, 0.06);
-      color: var(--text-primary);
-    }
-
-    .site-item .site-icon {
-      width: 20px;
-      height: 20px;
-      border-radius: 4px;
-      background: var(--bg-surface);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      color: var(--text-muted);
-      flex-shrink: 0;
-      overflow: hidden;
-    }
-
-    .site-item .site-icon img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .site-item .site-name {
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 13px;
-    }
-
-    .site-item .page-count {
-      font-size: 11px;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .sidebar-footer {
-      margin-top: auto;
-      padding: 12px 8px 0;
-      border-top: 0.5px solid var(--border-default);
-    }
-
-    .sidebar-footer .server-status {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .server-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--brand-accent);
-      flex-shrink: 0;
-    }
-
-    /* ─── Main content ───────────────────── */
-
-    .main {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .topbar {
-      height: 48px;
-      border-bottom: 0.5px solid var(--border-default);
-      display: flex;
-      align-items: center;
-      padding: 0 24px;
-      gap: 12px;
-      flex-shrink: 0;
-    }
-
-    .topbar-title {
-      font-size: 13px;
-      font-weight: 400;
-      color: var(--text-primary);
-    }
-
-    .topbar-sep {
-      color: var(--text-faint);
-    }
-
-    .topbar-page {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .topbar-actions {
-      margin-left: auto;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    /* ─── Buttons ─────────────────────────── */
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      height: 28px;
-      padding: 0 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 400;
-      letter-spacing: -0.08px;
-      cursor: pointer;
-      border: none;
-      font-family: inherit;
-      transition: opacity 0.15s;
-      white-space: nowrap;
-    }
-    .btn:hover { opacity: 0.85; }
-    .btn:active { opacity: 0.7; }
-
-    .btn-primary {
-      background: var(--bg-primary-button);
-      color: var(--text-on-primary);
-    }
-
-    .btn-secondary {
-      background: none;
-      border: 0.5px solid var(--border-subtle);
-      color: var(--text-primary);
-    }
-
-    .btn-accent {
-      background: var(--brand-accent-soft);
-      color: var(--brand-accent);
-      border: none;
-    }
-
-    .btn-ghost {
-      background: none;
-      border: none;
-      color: var(--text-secondary);
-      padding: 0 6px;
-    }
-
-    .btn-icon {
-      width: 28px;
-      height: 28px;
-      padding: 0;
-    }
-
-    /* ─── Welcome / empty state ──────────── */
-
-    .welcome {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .welcome-inner {
-      text-align: center;
-      max-width: 400px;
-    }
-
-    .welcome-inner h2 {
-      font-size: 17px;
-      font-weight: 400;
-      line-height: 21px;
-      letter-spacing: -0.44px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .welcome-inner p {
-      font-size: 13px;
-      line-height: 18px;
-      color: var(--text-muted);
-      margin-bottom: 20px;
-    }
-
-    .welcome-inner code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      background: var(--bg-card);
-      border: 0.5px solid var(--border-default);
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: var(--text-secondary);
-    }
-
-    /* ─── Site detail ────────────────────── */
-
-    .site-detail {
-      flex: 1;
-      overflow-y: auto;
-      padding: 24px;
-    }
-
-    .site-header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .site-header-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 8px;
-      background: var(--bg-card);
-      border: 0.5px solid var(--border-default);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .site-header-info h2 {
-      font-size: 17px;
-      font-weight: 400;
-      line-height: 21px;
-      letter-spacing: -0.44px;
-      color: var(--text-primary);
-    }
-
-    .site-header-info .meta {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    /* ─── Tabs ────────────────────────────── */
-
-    .tabs {
-      display: flex;
-      gap: 0;
-      border-bottom: 0.5px solid var(--border-default);
-      margin-bottom: 20px;
-    }
-
-    .tab {
-      padding: 8px 16px;
-      font-size: 13px;
-      color: var(--text-muted);
-      cursor: pointer;
-      border: none;
-      background: none;
-      font-family: inherit;
-      border-bottom: 2px solid transparent;
-      transition: color 0.15s;
-    }
-
-    .tab:hover { color: var(--text-secondary); }
-
-    .tab.active {
-      color: var(--text-primary);
-      border-bottom-color: var(--text-primary);
-    }
-
-    /* ─── Pages grid ─────────────────────── */
-
-    .pages-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
-    }
-
-    .page-card {
-      background: var(--bg-card);
-      border: 0.5px solid var(--border-default);
-      border-radius: 12px;
-      overflow: hidden;
-      cursor: pointer;
-      transition: border-color 0.15s;
-    }
-    .page-card:hover {
-      border-color: var(--border-subtle);
-    }
-
-    .page-card-preview {
-      width: 100%;
-      height: 160px;
-      background: var(--bg-surface);
-      position: relative;
-      overflow: hidden;
-    }
-
     .page-card-preview iframe {
       width: 1440px;
       height: 900px;
       border: none;
       transform-origin: top left;
-      transform: scale(0.194);
+      transform: scale(0.124);
       pointer-events: none;
     }
-
-    .page-card-info {
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    .design-md-content::-webkit-scrollbar,
+    .sidebar-scroll::-webkit-scrollbar {
+      width: 5px;
     }
-
-    .page-card-name {
-      font-size: 13px;
-      color: var(--text-primary);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .design-md-content::-webkit-scrollbar-track,
+    .sidebar-scroll::-webkit-scrollbar-track {
+      background: transparent;
     }
-
-    .page-card-size {
-      font-size: 11px;
-      color: var(--text-muted);
-      flex-shrink: 0;
-      margin-left: 8px;
+    .design-md-content::-webkit-scrollbar-thumb,
+    .sidebar-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
     }
-
-    /* ─── Design.md viewer ───────────────── */
-
-    .design-md-panel {
-      display: none;
-    }
-
-    .design-md-panel.show {
-      display: block;
-    }
-
-    .design-md-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-
-    .design-md-toolbar .status-text {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-left: auto;
-    }
-
-    .design-md-content {
-      background: var(--bg-card);
-      border: 0.5px solid var(--border-default);
-      border-radius: 12px;
-      padding: 24px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      line-height: 18px;
-      color: var(--text-secondary);
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: calc(100vh - 220px);
-      overflow-y: auto;
-    }
-
-    .design-md-content::-webkit-scrollbar { width: 6px; }
-    .design-md-content::-webkit-scrollbar-track { background: transparent; }
-    .design-md-content::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
-
-    .design-md-empty {
-      text-align: center;
-      padding: 48px 24px;
-      color: var(--text-muted);
-    }
-
-    .design-md-empty p {
-      margin-bottom: 12px;
-    }
-
-    /* ─── Page preview (full) ────────────── */
-
-    .page-preview-panel {
-      display: none;
-    }
-
-    .page-preview-panel.show {
-      display: block;
-    }
-
-    .page-preview-frame {
-      width: 100%;
-      height: calc(100vh - 220px);
-      border: 0.5px solid var(--border-default);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-
-    .page-preview-frame iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      background: white;
-    }
-
-    /* ─── Toast ───────────────────────────── */
-
-    .toast {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: var(--bg-card);
-      border: 0.5px solid var(--border-subtle);
-      border-radius: 8px;
-      padding: 10px 16px;
-      font-size: 13px;
-      color: var(--text-primary);
-      box-shadow: rgba(0, 0, 0, 0.24) 0px 2px 8px;
-      transform: translateY(100px);
-      opacity: 0;
-      transition: transform 0.2s, opacity 0.2s;
-      z-index: 100;
-    }
-
-    .toast.show {
-      transform: translateY(0);
-      opacity: 1;
-    }
-
-    .toast.success { border-left: 3px solid var(--brand-accent); }
-    .toast.error { border-left: 3px solid var(--red-error); }
-
-    /* ─── Scrollbar ──────────────────────── */
-
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
-
-    /* ─── Rendered MD (rich) ──────────────── */
-
     .md-rendered {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 13px;
-      line-height: 20px;
-      color: var(--text-secondary);
+      font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+      font-size: 11px;
+      line-height: 1.55;
+      color: rgba(255, 255, 255, 0.55);
     }
-
     .md-rendered h1 {
-      font-size: 20px;
-      font-weight: 400;
-      line-height: 28px;
-      color: var(--text-primary);
-      margin-bottom: 8px;
-      padding-bottom: 8px;
-      border-bottom: 0.5px solid var(--border-default);
-    }
-
-    .md-rendered h2 {
       font-size: 15px;
       font-weight: 500;
-      line-height: 22px;
-      color: var(--text-primary);
-      margin-top: 24px;
-      margin-bottom: 8px;
+      color: #fff;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     }
-
-    .md-rendered h3 {
-      font-size: 13px;
+    .md-rendered h2 {
+      font-size: 12px;
       font-weight: 500;
-      line-height: 18px;
-      color: var(--text-primary);
+      color: #fff;
       margin-top: 16px;
       margin-bottom: 6px;
     }
-
-    .md-rendered p { margin-bottom: 8px; }
-
-    .md-rendered blockquote {
-      border-left: 3px solid var(--border-subtle);
-      padding-left: 12px;
-      color: var(--text-muted);
-      margin-bottom: 12px;
-      font-size: 12px;
+    .md-rendered h3 {
+      font-size: 11px;
+      font-weight: 500;
+      color: #fff;
+      margin-top: 12px;
+      margin-bottom: 4px;
     }
-
+    .md-rendered p { margin-bottom: 6px; }
+    .md-rendered blockquote {
+      border-left: 2px solid rgba(255, 255, 255, 0.15);
+      padding-left: 10px;
+      color: rgba(255, 255, 255, 0.4);
+      margin-bottom: 8px;
+      font-size: 10px;
+    }
     .md-rendered code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      background: rgba(229, 229, 229, 0.06);
-      padding: 1px 5px;
-      border-radius: 4px;
-      color: var(--text-primary);
+      font-size: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: rgba(255, 255, 255, 0.9);
     }
-
     .md-rendered pre {
-      background: rgb(16, 16, 16);
-      border: 0.5px solid var(--border-default);
-      border-radius: 8px;
-      padding: 12px 16px;
+      background: rgb(12, 12, 12);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 10px 12px;
       overflow-x: auto;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-
     .md-rendered pre code {
       background: none;
       padding: 0;
-      font-size: 12px;
-      line-height: 18px;
-      color: var(--text-secondary);
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.55);
     }
-
     .md-rendered table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 12px;
-      font-size: 12px;
+      margin-bottom: 8px;
+      font-size: 10px;
     }
-
     .md-rendered th {
       text-align: left;
-      padding: 6px 10px;
-      border-bottom: 0.5px solid var(--border-subtle);
-      color: var(--text-muted);
+      padding: 4px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.4);
       font-weight: 600;
-      font-size: 11px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
-
     .md-rendered td {
-      padding: 6px 10px;
-      border-bottom: 0.5px solid var(--border-default);
-      color: var(--text-secondary);
+      padding: 4px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.55);
     }
-
     .md-rendered ul, .md-rendered ol {
-      padding-left: 20px;
-      margin-bottom: 8px;
+      padding-left: 16px;
+      margin-bottom: 6px;
     }
-
-    .md-rendered li { margin-bottom: 4px; }
-
-    .md-rendered strong { color: var(--text-primary); }
-
+    .md-rendered li { margin-bottom: 2px; }
+    .md-rendered strong { color: #fff; }
     .md-rendered hr {
       border: none;
-      border-top: 0.5px solid var(--border-default);
-      margin: 16px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      margin: 12px 0;
     }
   </style>
 </head>
-<body>
-  <div class="shell">
-    <!-- Sidebar -->
-    <nav class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <h1>Design Grab</h1>
-        <span class="badge">Dashboard</span>
-      </div>
-      <div class="sidebar-section-label">Sites</div>
-      <div id="siteList"></div>
-      <div class="sidebar-footer">
-        <div class="server-status">
-          <span class="server-dot" id="serverDot"></span>
-          <span id="serverStatus">Running on :3847</span>
+<body class="min-h-full bg-black text-[12px] font-medium leading-snug tracking-[-0.1px] text-white antialiased">
+  <div class="flex min-h-screen">
+    <!-- Narrow rail: brand + scrollable sites + status -->
+    <aside
+      id="sidebar"
+      class="flex min-h-screen w-[11.25rem] shrink-0 flex-col border-r border-white/15 bg-black py-3 pl-2 pr-1.5"
+    >
+      <div class="flex shrink-0 items-start gap-2 px-1.5 pb-1">
+        <svg width="14" height="14" class="mt-0.5 shrink-0 text-white" viewBox="-262.5 -262.5 525 525" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path fill="currentColor" d="M-112.5,-150C-112.5,-118.125,-118.125,-112.5,-150,-112.5L-112.5,-112.5ZM-150,-75L-112.5,-75L-112.5,-37.5L-150,-37.5ZM-150,-75L-187.5,-75L-187.5,-37.5L-150,-37.5ZM-150,-75L-187.5,-75C-187.5,-106.875,-181.875,-112.5,-150,-112.5ZM-150,-75L-112.5,-75L-112.5,-112.5L-150,-112.5ZM-150,0L-112.5,0L-112.5,37.5L-150,37.5ZM-150,0L-187.5,0C-187.5,31.875,-181.875,37.5,-150,37.5ZM-150,0L-187.5,0L-187.5,-37.5L-150,-37.5ZM-150,0L-112.5,0L-112.5,-37.5L-150,-37.5ZM-112.5,75C-112.5,106.875,-118.125,112.5,-150,112.5L-112.5,112.5ZM-112.5,75C-112.5,43.125,-118.125,37.5,-150,37.5L-112.5,37.5ZM-150,150L-112.5,150L-112.5,187.5L-150,187.5ZM-150,150L-187.5,150C-187.5,181.875,-181.875,187.5,-150,187.5ZM-150,150L-187.5,150C-187.5,118.125,-181.875,112.5,-150,112.5ZM-150,150L-112.5,150L-112.5,112.5L-150,112.5ZM-75,-150L-37.5,-150L-37.5,-112.5L-75,-112.5ZM-75,-150L-112.5,-150L-112.5,-112.5L-75,-112.5ZM-75,-150L-112.5,-150C-112.5,-181.875,-106.875,-187.5,-75,-187.5ZM-75,-150L-37.5,-150C-37.5,-181.875,-43.125,-187.5,-75,-187.5ZM-37.5,-75C-37.5,-43.125,-43.125,-37.5,-75,-37.5L-37.5,-37.5ZM-112.5,-75C-112.5,-43.125,-106.875,-37.5,-75,-37.5L-112.5,-37.5ZM-112.5,-75C-112.5,-106.875,-106.875,-112.5,-75,-112.5L-112.5,-112.5ZM-37.5,-75C-37.5,-106.875,-43.125,-112.5,-75,-112.5L-37.5,-112.5ZM-75,0L-37.5,0L-37.5,37.5L-75,37.5ZM-75,0L-112.5,0L-112.5,37.5L-75,37.5ZM-75,0L-112.5,0L-112.5,-37.5L-75,-37.5ZM-75,0L-37.5,0L-37.5,-37.5L-75,-37.5ZM-75,75L-37.5,75L-37.5,112.5L-75,112.5ZM-75,75L-112.5,75L-112.5,112.5L-75,112.5ZM-75,75L-112.5,75L-112.5,37.5L-75,37.5ZM-75,75L-37.5,75L-37.5,37.5L-75,37.5ZM-75,150L-37.5,150C-37.5,181.875,-43.125,187.5,-75,187.5ZM-75,150L-112.5,150L-112.5,187.5L-75,187.5ZM-75,150L-112.5,150L-112.5,112.5L-75,112.5ZM-75,150L-37.5,150L-37.5,112.5L-75,112.5ZM37.5,-150C37.5,-118.125,31.875,-112.5,0,-112.5L37.5,-112.5ZM-37.5,-150C-37.5,-118.125,-31.875,-112.5,0,-112.5L-37.5,-112.5ZM0,-75L37.5,-75L37.5,-37.5L0,-37.5ZM0,-75L-37.5,-75L-37.5,-37.5L0,-37.5ZM0,-75L-37.5,-75L-37.5,-112.5L0,-112.5ZM0,-75L37.5,-75L37.5,-112.5L0,-112.5ZM0,0L37.5,0L37.5,37.5L0,37.5ZM0,0L-37.5,0L-37.5,37.5L0,37.5ZM0,0L-37.5,0L-37.5,-37.5L0,-37.5ZM0,0L37.5,0L37.5,-37.5L0,-37.5ZM0,75L37.5,75L37.5,112.5L0,112.5ZM0,75L-37.5,75L-37.5,112.5L0,112.5ZM0,75L-37.5,75L-37.5,37.5L0,37.5ZM0,75L37.5,75L37.5,37.5L0,37.5ZM-37.5,150C-37.5,118.125,-31.875,112.5,0,112.5L-37.5,112.5ZM37.5,150C37.5,118.125,31.875,112.5,0,112.5L37.5,112.5ZM75,-150L112.5,-150L112.5,-112.5L75,-112.5ZM75,-150L37.5,-150L37.5,-112.5L75,-112.5ZM75,-150L37.5,-150C37.5,-181.875,43.125,-187.5,75,-187.5ZM75,-150L112.5,-150C112.5,-181.875,106.875,-187.5,75,-187.5ZM112.5,-75C112.5,-43.125,106.875,-37.5,75,-37.5L112.5,-37.5ZM37.5,-75C37.5,-43.125,43.125,-37.5,75,-37.5L37.5,-37.5ZM37.5,-75C37.5,-106.875,43.125,-112.5,75,-112.5L37.5,-112.5ZM112.5,-75C112.5,-106.875,106.875,-112.5,75,-112.5L112.5,-112.5ZM75,0L112.5,0L112.5,37.5L75,37.5ZM75,0L37.5,0L37.5,37.5L75,37.5ZM75,0L37.5,0L37.5,-37.5L75,-37.5ZM75,0L112.5,0L112.5,-37.5L75,-37.5ZM75,75L112.5,75L112.5,112.5L75,112.5ZM75,75L37.5,75L37.5,112.5L75,112.5ZM75,75L37.5,75L37.5,37.5L75,37.5ZM75,75L112.5,75L112.5,37.5L75,37.5ZM75,150L112.5,150L112.5,187.5L75,187.5ZM75,150L37.5,150C37.5,181.875,43.125,187.5,75,187.5ZM75,150L37.5,150L37.5,112.5L75,112.5ZM75,150L112.5,150L112.5,112.5L75,112.5ZM112.5,-150C112.5,-118.125,118.125,-112.5,150,-112.5L112.5,-112.5ZM150,-75L187.5,-75L187.5,-37.5L150,-37.5ZM150,-75L112.5,-75L112.5,-37.5L150,-37.5ZM150,-75L112.5,-75L112.5,-112.5L150,-112.5ZM150,-75L187.5,-75C187.5,-106.875,181.875,-112.5,150,-112.5ZM150,0L187.5,0C187.5,31.875,181.875,37.5,150,37.5ZM150,0L112.5,0L112.5,37.5L150,37.5ZM150,0L112.5,0L112.5,-37.5L150,-37.5ZM150,0L187.5,0L187.5,-37.5L150,-37.5ZM112.5,75C112.5,106.875,118.125,112.5,150,112.5L112.5,112.5ZM112.5,75C112.5,43.125,118.125,37.5,150,37.5L112.5,37.5ZM150,150L187.5,150C187.5,181.875,181.875,187.5,150,187.5ZM150,150L112.5,150L112.5,187.5L150,187.5ZM150,150L112.5,150L112.5,112.5L150,112.5ZM150,150L187.5,150C187.5,118.125,181.875,112.5,150,112.5Z" />
+        </svg>
+        <div class="min-w-0 leading-tight">
+          <div class="text-[11px] font-medium tracking-[-0.08px] text-white/90">Design Grab</div>
+          <div class="text-[10px] font-medium text-white/35">Dashboard</div>
         </div>
       </div>
-    </nav>
 
-    <!-- Main -->
-    <main class="main" id="main">
-      <!-- Welcome state -->
-      <div class="welcome" id="welcomeView">
-        <div class="welcome-inner">
-          <h2>Design Grab</h2>
-          <p>
-            Capture any website's design system with the Chrome extension.
-            View, manage, and copy <code>design.md</code> files from here.
+      <div class="mx-1.5 mb-1.5 mt-2 flex min-h-0 flex-1 flex-col border-t border-white/10 pt-2">
+        <div class="shrink-0 px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/35">Sites</div>
+        <div id="siteList" class="sidebar-scroll flex min-h-0 flex-1 flex-col gap-px overflow-y-auto pr-0.5"></div>
+      </div>
+
+      <div class="mt-auto border-t border-white/10 px-2 pt-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] font-medium tabular-nums text-white/40">
+          <span class="h-1 w-1 shrink-0 rounded-full bg-emerald-400/90" id="serverDot"></span>
+          <span id="serverStatus" class="truncate" title="Dashboard server">On :3847</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="flex min-w-0 flex-1 flex-col bg-black" id="main">
+      <div id="welcomeView" class="flex flex-1 flex-col items-center justify-center px-6 py-10">
+        <div class="max-w-[17rem] text-center">
+          <p class="mb-2 text-[11px] font-medium text-white/45">Local captures</p>
+          <h1 class="mb-2 text-[15px] font-medium tracking-[-0.2px] text-white">Design Grab</h1>
+          <p class="mb-3 text-[11px] leading-relaxed text-white/45">
+            Use the extension to capture a site, then pick it in the sidebar. Manage pages and
+            <code class="rounded border border-white/15 bg-white/[0.06] px-1 py-px font-mono text-[10px] text-white/65">design.md</code> here.
           </p>
-          <p>Select a site from the sidebar to get started.</p>
+          <p class="text-[10px] text-white/30">Select a site from the list</p>
         </div>
       </div>
 
-      <!-- Site detail view -->
-      <div id="siteView" style="display:none; flex:1; display:none; flex-direction:column;">
-        <div class="topbar" id="topbar">
-          <span class="topbar-title" id="topbarTitle"></span>
-          <span class="topbar-sep">/</span>
-          <span class="topbar-page" id="topbarPage">Overview</span>
-          <div class="topbar-actions" id="topbarActions"></div>
+      <div id="siteView" class="hidden flex min-h-0 flex-1 flex-col">
+        <div class="flex h-9 shrink-0 items-center gap-1.5 border-b border-white/15 px-4 text-xs" id="topbar">
+          <span class="truncate font-medium text-white/90" id="topbarTitle"></span>
+          <span class="shrink-0 text-white/25">/</span>
+          <span class="shrink-0 text-white/40" id="topbarPage">Overview</span>
+          <div class="ml-auto flex items-center gap-1.5" id="topbarActions"></div>
         </div>
-        <div class="site-detail" id="siteContent"></div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5" id="siteContent"></div>
       </div>
     </main>
   </div>
 
-  <div class="toast" id="toast"></div>
-
+  <div id="toast" role="status" aria-live="polite"></div>
   <script src="./app.js"></script>
 </body>
 </html>

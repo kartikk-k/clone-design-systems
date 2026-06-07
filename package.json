@@ -1,15 +1,35 @@
 {
   "name": "designgrab",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "Grab any website's design system. Capture, render, and extract design tokens into a portable design.md file.",
+  "module": "server.ts",
   "type": "module",
-  "private": true,
+  "bin": {
+    "designgrab": "bin/designgrab.ts"
+  },
+  "files": [
+    "bin/",
+    "dashboard/",
+    "extension/",
+    "lib/inject-script.ts",
+    "scripts/lib/",
+    "server.ts",
+    "instructions.md"
+  ],
+  "keywords": [
+    "design-system",
+    "design-tokens",
+    "ui",
+    "css",
+    "capture",
+    "chrome-extension"
+  ],
+  "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
-  "dependencies": {
-    "playwright": "^1.60.0"
-  }
+  "dependencies": {}
 }

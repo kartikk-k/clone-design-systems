@@ -1,3 +1,44 @@
+// ─── Design tokens (Tailwind class strings, matches marketing site) ───
+
+const BTN_PRIMARY =
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-3.5 text-xs font-medium tracking-[-0.08px] text-black transition-opacity hover:opacity-90";
+const BTN_SECONDARY =
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/20 bg-white/[0.08] px-3.5 text-xs font-medium tracking-[-0.08px] text-white/90 transition-colors hover:bg-white/12";
+const BTN_ICON =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/[0.06] text-white/90 transition-colors hover:bg-white/10";
+const BTN_ACCENT =
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-3.5 text-xs font-medium tracking-[-0.08px] text-white/90 ring-1 ring-inset ring-white/15 transition-colors hover:bg-white/12";
+
+const TOAST_BASE =
+  "fixed bottom-4 right-4 z-[100] max-w-[16rem] rounded-md border border-white/15 bg-[#141414] px-3 py-2 text-xs text-white/90 shadow-lg transition-all duration-200 ease-out";
+
+const TAB_BASE =
+  "tab -mb-px cursor-pointer border-b-2 border-b-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium tracking-[-0.06px] transition-colors";
+
+function tabClass(active) {
+  return active
+    ? `${TAB_BASE} border-b-white text-white`
+    : `${TAB_BASE} text-white/40 hover:text-white/65`;
+}
+
+function setTabActiveState(tabsEl, tab) {
+  tabsEl.querySelectorAll(".tab").forEach((t) => {
+    const active = t.textContent.trim() === (tab === "pages" ? "Pages" : "design.md");
+    t.classList.toggle("border-b-white", active);
+    t.classList.toggle("text-white", active);
+    t.classList.toggle("border-b-transparent", !active);
+    t.classList.toggle("text-white/40", !active);
+    t.classList.toggle("hover:text-white/65", !active);
+  });
+}
+
+function clearTabActiveState(tabsEl) {
+  tabsEl.querySelectorAll(".tab").forEach((t) => {
+    t.classList.remove("border-b-white", "text-white");
+    t.classList.add("border-b-transparent", "text-white/40", "hover:text-white/65");
+  });
+}
+
 // ─── State ──────────────────────────────────────
 
 let sites = [];
@@ -16,6 +57,8 @@ const topbarPage = document.getElementById("topbarPage");
 const topbarActions = document.getElementById("topbarActions");
 const siteContent = document.getElementById("siteContent");
 const toast = document.getElementById("toast");
+
+toast.className = `${TOAST_BASE} pointer-events-none translate-y-4 opacity-0`;
 
 // ─── Init ───────────────────────────────────────
 
@@ -86,17 +129,23 @@ function renderSidebar() {
   siteList.innerHTML = "";
 
   if (sites.length === 0) {
-    siteList.innerHTML = `<div style="padding: 8px; font-size: 12px; color: var(--text-muted);">No captures yet.<br>Use the Chrome extension to capture a site.</div>`;
+    siteList.innerHTML = `<div class="rounded-md border border-dashed border-white/10 px-2 py-2.5 text-[10px] leading-snug text-white/38">No sites yet. Capture with the extension.</div>`;
     return;
   }
 
   for (const site of sites) {
     const btn = document.createElement("button");
-    btn.className = "site-item" + (currentSite?.name === site.name ? " active" : "");
+    const active = currentSite?.name === site.name;
+    btn.type = "button";
+    btn.className = [
+      "flex w-full items-center gap-1.5 rounded-sm py-1.5 pl-1.5 pr-1.5 text-left transition-colors",
+      active
+        ? "border-l-2 border-white bg-white/[0.06] text-white"
+        : "border-l-2 border-transparent text-white/55 hover:bg-white/[0.04] hover:text-white/90",
+    ].join(" ");
     btn.innerHTML = `
-      <span class="site-icon">${site.name[0].toUpperCase()}</span>
-      <span class="site-name">${site.name}</span>
-      <span class="page-count">${site.pages.length}</span>
+      <span class="min-w-0 flex-1 truncate font-mono text-[11px] leading-none tracking-tight">${site.name}</span>
+      <span class="shrink-0 rounded bg-white/[0.06] px-1 py-px text-[10px] font-medium tabular-nums text-white/40">${site.pages.length}</span>
     `;
     btn.onclick = () => selectSite(site);
     siteList.appendChild(btn);
@@ -114,15 +163,14 @@ function selectSite(site) {
 }
 
 function showSiteView() {
-  welcomeView.style.display = "none";
-  siteView.style.display = "flex";
-  siteView.style.flexDirection = "column";
+  welcomeView.classList.add("hidden");
+  siteView.classList.remove("hidden");
 }
 
 function showWelcome() {
   currentSite = null;
-  welcomeView.style.display = "flex";
-  siteView.style.display = "none";
+  welcomeView.classList.remove("hidden");
+  siteView.classList.add("hidden");
   renderSidebar();
 }
 
@@ -135,8 +183,8 @@ function renderSiteDetail() {
 
   // Topbar actions
   topbarActions.innerHTML = `
-    <button class="btn btn-secondary btn-icon" title="Refresh" onclick="refreshSite()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    <button type="button" class="${BTN_ICON}" title="Refresh" onclick="refreshSite()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
   `;
 
@@ -145,22 +193,22 @@ function renderSiteDetail() {
 
   // Site header
   const header = document.createElement("div");
-  header.className = "site-header";
+  header.className = "mb-4 flex items-center gap-3";
   header.innerHTML = `
-    <div class="site-header-icon">${site.name[0].toUpperCase()}</div>
-    <div class="site-header-info">
-      <h2>${site.name}</h2>
-      <div class="meta">${site.pages.length} page${site.pages.length !== 1 ? "s" : ""} captured${site.hasDesignMd ? " &middot; design.md available" : ""}</div>
+    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/[0.04] font-mono text-[11px] text-white/50">${site.name[0].toUpperCase()}</div>
+    <div class="min-w-0">
+      <h2 class="truncate font-mono text-[13px] font-medium tracking-[-0.12px] text-white">${site.name}</h2>
+      <div class="mt-0.5 text-[10px] text-white/38">${site.pages.length} page${site.pages.length !== 1 ? "s" : ""}${site.hasDesignMd ? " · design.md" : ""}</div>
     </div>
   `;
   siteContent.appendChild(header);
 
   // Tabs
   const tabs = document.createElement("div");
-  tabs.className = "tabs";
+  tabs.className = "tabs -mb-px mb-4 flex gap-1 border-b border-white/15";
   tabs.innerHTML = `
-    <button class="tab ${currentTab === "pages" ? "active" : ""}" onclick="switchTab('pages')">Pages</button>
-    <button class="tab ${currentTab === "design-md" ? "active" : ""}" onclick="switchTab('design-md')">design.md</button>
+    <button type="button" class="${tabClass(currentTab === "pages")}" onclick="switchTab('pages')">Pages</button>
+    <button type="button" class="${tabClass(currentTab === "design-md")}" onclick="switchTab('design-md')">design.md</button>
   `;
   siteContent.appendChild(tabs);
 
@@ -179,9 +227,7 @@ function switchTab(tab) {
   // Remove everything after tabs
   while (tabs.nextSibling) tabs.nextSibling.remove();
   // Update tab active state
-  tabs.querySelectorAll(".tab").forEach((t) => {
-    t.classList.toggle("active", t.textContent.trim() === (tab === "pages" ? "Pages" : "design.md"));
-  });
+  setTabActiveState(tabs, tab);
 
   if (tab === "pages") {
     renderPagesTab(currentSite);
@@ -194,22 +240,23 @@ function switchTab(tab) {
 
 function renderPagesTab(site) {
   const grid = document.createElement("div");
-  grid.className = "pages-grid";
+  grid.className = "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3";
 
   for (const page of site.pages) {
     const card = document.createElement("div");
-    card.className = "page-card";
+    card.className =
+      "group cursor-pointer overflow-hidden rounded-[5px] border border-white/15 bg-white/[0.04] transition-colors hover:border-white/25";
 
     const previewUrl = `${API}/api/sites/${site.name}/preview/${page.rendered}`;
     const slug = page.rendered.replace("rendered-", "").replace(".html", "");
 
     card.innerHTML = `
-      <div class="page-card-preview">
-        <iframe src="${previewUrl}" loading="lazy" sandbox="allow-same-origin"></iframe>
+      <div class="page-card-preview relative h-28 overflow-hidden bg-white/[0.06]">
+        <iframe src="${previewUrl}" loading="lazy" sandbox="allow-same-origin" title="Preview ${slug}"></iframe>
       </div>
-      <div class="page-card-info">
-        <span class="page-card-name">${slug}</span>
-        <span class="page-card-size">${page.captureKB || "?"}KB</span>
+      <div class="flex items-center justify-between gap-2 border-t border-white/10 px-2 py-1.5">
+        <span class="min-w-0 truncate font-mono text-[11px] text-white/85">${slug}</span>
+        <span class="shrink-0 text-[10px] tabular-nums text-white/35">${page.captureKB || "?"}KB</span>
       </div>
     `;
 
@@ -229,32 +276,32 @@ function openPagePreview(siteName, page, slug) {
   const tabs = siteContent.querySelector(".tabs");
   while (tabs.nextSibling) tabs.nextSibling.remove();
 
-  // Update tab active (none active for preview)
-  tabs.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+  clearTabActiveState(tabs);
 
   const panel = document.createElement("div");
-  panel.className = "page-preview-panel show";
+  panel.className = "block";
 
   const toolbar = document.createElement("div");
-  toolbar.className = "design-md-toolbar";
+  toolbar.className = "mb-3 flex flex-wrap items-center gap-1.5";
   toolbar.innerHTML = `
-    <button class="btn btn-secondary" onclick="switchTab('pages')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <button type="button" class="${BTN_SECONDARY}" onclick="switchTab('pages')">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       Back
     </button>
-    <span style="flex:1"></span>
-    <button class="btn btn-secondary" onclick="window.open('${API}/api/sites/${siteName}/preview/${page.rendered}', '_blank')">
+    <span class="grow"></span>
+    <button type="button" class="${BTN_SECONDARY}" onclick="window.open('${API}/api/sites/${siteName}/preview/${page.rendered}', '_blank')">
       Open in new tab
     </button>
-    <button class="btn btn-secondary" style="color: var(--red-error);" onclick="confirmDeletePage('${siteName}', '${page.capture}')">
+    <button type="button" class="${BTN_SECONDARY} text-red-400 hover:text-red-300" onclick="confirmDeletePage('${siteName}', '${page.capture}')">
       Delete
     </button>
   `;
   panel.appendChild(toolbar);
 
   const frame = document.createElement("div");
-  frame.className = "page-preview-frame";
-  frame.innerHTML = `<iframe src="${API}/api/sites/${siteName}/preview/${page.rendered}"></iframe>`;
+  frame.className =
+    "page-preview-frame h-[calc(100vh-9.5rem)] w-full overflow-hidden rounded-[5px] border border-white/15 bg-white";
+  frame.innerHTML = `<iframe src="${API}/api/sites/${siteName}/preview/${page.rendered}" title="Full preview ${slug}" class="h-full w-full border-0"></iframe>`;
   panel.appendChild(frame);
 
   siteContent.appendChild(panel);
@@ -281,15 +328,16 @@ async function confirmDeletePage(siteName, captureFile) {
 
 async function renderDesignMdTab(site) {
   const container = document.createElement("div");
-  container.className = "design-md-panel show";
+  container.className = "block";
 
   const toolbar = document.createElement("div");
-  toolbar.className = "design-md-toolbar";
-  toolbar.innerHTML = `<span class="status-text">Loading...</span>`;
+  toolbar.className = "mb-3 flex flex-wrap items-center gap-1.5";
+  toolbar.innerHTML = `<span class="ml-auto text-[10px] text-white/35">Loading…</span>`;
   container.appendChild(toolbar);
 
   const content = document.createElement("div");
-  content.className = "design-md-content md-rendered";
+  content.className =
+    "design-md-content md-rendered max-h-[calc(100vh-9.5rem)] overflow-y-auto rounded-[5px] border border-white/15 bg-white/[0.04] p-3.5 font-mono text-[11px] leading-relaxed text-white/55";
   content.textContent = "Loading...";
   container.appendChild(content);
 
@@ -299,21 +347,25 @@ async function renderDesignMdTab(site) {
 
   if (md) {
     toolbar.innerHTML = `
-      <button class="btn btn-primary" onclick="copyDesignMd('${site.name}')">Copy to clipboard</button>
-      <button class="btn btn-secondary" onclick="downloadDesignMd('${site.name}')">Download</button>
-      <button class="btn btn-accent" onclick="regenerateDesignMd('${site.name}')">Regenerate</button>
-      <span class="status-text">${(md.length / 1024).toFixed(1)}KB</span>
+      <button type="button" class="${BTN_PRIMARY}" onclick="copyDesignMd('${site.name}')">Copy</button>
+      <button type="button" class="${BTN_SECONDARY}" onclick="downloadDesignMd('${site.name}')">Download</button>
+      <button type="button" class="${BTN_ACCENT}" onclick="regenerateDesignMd('${site.name}')">Regenerate</button>
+      <span class="ml-auto text-[10px] tabular-nums text-white/35">${(md.length / 1024).toFixed(1)} KB</span>
     `;
+    content.className =
+      "design-md-content md-rendered max-h-[calc(100vh-9.5rem)] overflow-y-auto rounded-[5px] border border-white/15 bg-white/[0.04] p-3.5 text-[11px] leading-relaxed text-white/55";
     content.innerHTML = renderMarkdown(md);
   } else {
     toolbar.innerHTML = `
-      <button class="btn btn-primary" onclick="regenerateDesignMd('${site.name}')">Generate design.md</button>
-      <span class="status-text">No design.md found</span>
+      <button type="button" class="${BTN_PRIMARY}" onclick="regenerateDesignMd('${site.name}')">Generate</button>
+      <span class="ml-auto text-[10px] text-white/35">No file</span>
     `;
+    content.className =
+      "design-md-content max-h-[calc(100vh-9.5rem)] overflow-y-auto rounded-[5px] border border-white/15 bg-white/[0.04] p-3.5 text-[11px] text-white/45";
     content.innerHTML = `
-      <div class="design-md-empty">
-        <p>No <code>design.md</code> exists for this site yet.</p>
-        <p>Click <strong>Generate</strong> to auto-extract design tokens from the captured pages,<br>or create one manually and place it at <code>.data/${site.name}/design.md</code></p>
+      <div class="py-6 text-center text-[11px] leading-relaxed text-white/40">
+        <p class="mb-2">No <code class="rounded border border-white/15 bg-white/[0.06] px-1 py-px font-mono text-[10px] text-white/65">design.md</code> yet.</p>
+        <p><strong class="text-white/80">Generate</strong> from captures or add <code class="rounded border border-white/15 bg-white/[0.06] px-1 py-px font-mono text-[10px] text-white/65">.data/${site.name}/design.md</code></p>
       </div>
     `;
   }
@@ -430,6 +482,9 @@ function escapeHtml(text) {
 
 function showToast(message, type = "success") {
   toast.textContent = message;
-  toast.className = `toast show ${type}`;
-  setTimeout(() => { toast.className = "toast"; }, 3000);
+  const accent = type === "success" ? "border-l-2 border-l-emerald-400/90" : "border-l-2 border-l-red-500/90";
+  toast.className = `${TOAST_BASE} pointer-events-auto translate-y-0 opacity-100 ${accent}`;
+  setTimeout(() => {
+    toast.className = `${TOAST_BASE} pointer-events-none translate-y-4 opacity-0`;
+  }, 3000);
 }

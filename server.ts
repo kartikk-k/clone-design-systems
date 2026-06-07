@@ -8,19 +8,46 @@
  */
 
 import { join } from "node:path";
-import { mkdir, readdir, stat, unlink } from "node:fs/promises";
+import { homedir } from "node:os";
+import { mkdir, readdir, stat, unlink, cp } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { parseFigH2D, buildAssetMap } from "./scripts/lib/parser.ts";
 import { renderNode, type RenderContext } from "./scripts/lib/renderer.ts";
 import { buildPage } from "./scripts/lib/template.ts";
 import { generateDesignMd } from "./scripts/lib/design-extractor.ts";
 
 const port = parseInt(process.argv.find((_, i, a) => a[i - 1] === "--port") || "3847");
-const DATA_DIR = join(import.meta.dir, ".data");
+const DATA_DIR = join(homedir(), ".designgrab");
+
+// Ensure data dir exists
+await mkdir(DATA_DIR, { recursive: true });
+
+// Migrate from old .data/ directory if it exists and global dir is empty
+const oldDataDir = join(import.meta.dir, ".data");
+if (existsSync(oldDataDir)) {
+  try {
+    const globalEntries = await readdir(DATA_DIR);
+    const globalSites = globalEntries.filter((e) => {
+      try { return Bun.file(join(DATA_DIR, e)).name !== undefined; } catch { return false; }
+    });
+    const oldEntries = await readdir(oldDataDir, { withFileTypes: true });
+    const oldSites = oldEntries.filter((e) => e.isDirectory());
+
+    for (const site of oldSites) {
+      const dest = join(DATA_DIR, site.name);
+      if (!existsSync(dest)) {
+        await cp(join(oldDataDir, site.name), dest, { recursive: true });
+        console.log(`  \x1b[33mmigrated\x1b[0m ${site.name} -> ~/.designgrab/${site.name}`);
+      }
+    }
+  } catch {}
+}
 
 console.log("");
 console.log("  \x1b[36m\x1b[1mDesign Grab\x1b[0m");
 console.log(`  \x1b[2mDashboard:  http://localhost:${port}\x1b[0m`);
 console.log(`  \x1b[2mCapture:    http://localhost:${port}/capture\x1b[0m`);
+console.log(`  \x1b[2mData:       ${DATA_DIR}\x1b[0m`);
 console.log("");
 
 Bun.serve({
