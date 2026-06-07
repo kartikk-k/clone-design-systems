@@ -1,103 +1,317 @@
 #!/usr/bin/env bun
 /**
- * Local capture server — receives captured DOM data from the Chrome extension.
- * Saves raw captures and auto-renders to HTML.
+ * Design System Clone — Dashboard + Capture Server
+ *
+ * Serves the dashboard UI and receives captures from the Chrome extension.
  *
  * Usage: bun server.ts [--port 3847]
  */
 
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { parseFigH2D, buildAssetMap } from "./scripts/lib/parser.ts";
 import { renderNode, type RenderContext } from "./scripts/lib/renderer.ts";
 import { buildPage } from "./scripts/lib/template.ts";
+import { generateDesignMd } from "./scripts/lib/design-extractor.ts";
 
 const port = parseInt(process.argv.find((_, i, a) => a[i - 1] === "--port") || "3847");
+const DATA_DIR = join(import.meta.dir, ".data");
 
 console.log("");
-console.log("  \x1b[36m\x1b[1mDesign System Clone — Capture Server\x1b[0m");
-console.log(`  \x1b[2mListening on http://localhost:${port}\x1b[0m`);
-console.log("  \x1b[2mWaiting for captures from Chrome extension...\x1b[0m");
+console.log("  \x1b[36m\x1b[1mDesign System Clone\x1b[0m");
+console.log(`  \x1b[2mDashboard:  http://localhost:${port}\x1b[0m`);
+console.log(`  \x1b[2mCapture:    http://localhost:${port}/capture\x1b[0m`);
 console.log("");
 
 Bun.serve({
   port,
   async fetch(req) {
     const url = new URL(req.url);
+    const path = url.pathname;
 
-    // CORS headers for extension
-    const corsHeaders = {
+    const cors = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+      "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     };
 
-    // Handle CORS preflight
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return new Response(null, { status: 204, headers: cors });
     }
 
-    // Health check
-    if (url.pathname === "/health") {
-      return Response.json({ status: "ok", version: "1.0" }, { headers: corsHeaders });
+    // ─── Dashboard static files ───────────────
+
+    if (path === "/" || path === "/index.html") {
+      return serveFile(join(import.meta.dir, "dashboard/index.html"), "text/html");
     }
 
-    // Receive capture
-    if (url.pathname === "/capture" && req.method === "POST") {
-      try {
-        const body = await req.json() as {
-          url: string;
-          data: string;
-          title?: string;
-          timestamp?: number;
-        };
-
-        if (!body.url || !body.data) {
-          return Response.json({ error: "Missing url or data" }, { status: 400, headers: corsHeaders });
-        }
-
-        const result = await saveAndRender(body.url, body.data, body.title);
-
-        console.log(`  \x1b[32m✓\x1b[0m ${result.siteName}/${result.rawFilename} (${result.rawKB}KB → ${result.renderedKB}KB)`);
-
-        return Response.json({
-          success: true,
-          site: result.siteName,
-          raw: result.rawFilename,
-          rendered: result.renderedFilename,
-          rawSize: result.rawKB,
-          renderedSize: result.renderedKB,
-        }, { headers: corsHeaders });
-      } catch (err: any) {
-        console.log(`  \x1b[31m✗\x1b[0m Error: ${err.message}`);
-        return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
-      }
+    if (path === "/app.js") {
+      return serveFile(join(import.meta.dir, "dashboard/app.js"), "application/javascript");
     }
 
-    // List captured sites
-    if (url.pathname === "/sites" && req.method === "GET") {
-      try {
-        const { readdir } = await import("node:fs/promises");
-        const entries = await readdir(".data", { withFileTypes: true });
-        const sites = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-        return Response.json({ sites }, { headers: corsHeaders });
-      } catch {
-        return Response.json({ sites: [] }, { headers: corsHeaders });
-      }
+    // ─── Health ───────────────────────────────
+
+    if (path === "/health") {
+      return Response.json({ status: "ok", version: "2.0" }, { headers: cors });
     }
 
-    return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
+    // ─── Capture (from extension) ─────────────
+
+    if (path === "/capture" && req.method === "POST") {
+      return handleCapture(req, cors);
+    }
+
+    // ─── API: List sites with detail ──────────
+
+    if (path === "/api/sites" && req.method === "GET") {
+      return handleListSites(cors);
+    }
+
+    // Legacy /sites endpoint (extension compat)
+    if (path === "/sites" && req.method === "GET") {
+      return handleListSites(cors);
+    }
+
+    // ─── API: Site detail ─────────────────────
+
+    const siteMatch = path.match(/^\/api\/sites\/([^/]+)$/);
+    if (siteMatch && req.method === "GET") {
+      return handleSiteDetail(siteMatch[1]!, cors);
+    }
+
+    // ─── API: design.md ──────────────────────
+
+    const designMdMatch = path.match(/^\/api\/sites\/([^/]+)\/design\.md$/);
+    if (designMdMatch && req.method === "GET") {
+      return handleGetDesignMd(designMdMatch[1]!, cors);
+    }
+
+    // ─── API: Generate design.md ──────────────
+
+    const genMatch = path.match(/^\/api\/sites\/([^/]+)\/generate-design-md$/);
+    if (genMatch && req.method === "POST") {
+      return handleGenerateDesignMd(genMatch[1]!, cors);
+    }
+
+    // ─── API: Preview rendered HTML ───────────
+
+    const previewMatch = path.match(/^\/api\/sites\/([^/]+)\/preview\/(.+)$/);
+    if (previewMatch && req.method === "GET") {
+      return handlePreview(previewMatch[1]!, previewMatch[2]!, cors);
+    }
+
+    // ─── API: Delete a capture ────────────────
+
+    const deleteMatch = path.match(/^\/api\/sites\/([^/]+)\/pages\/(.+)$/);
+    if (deleteMatch && req.method === "DELETE") {
+      return handleDeletePage(deleteMatch[1]!, deleteMatch[2]!, cors);
+    }
+
+    return Response.json({ error: "Not found" }, { status: 404, headers: cors });
   },
 });
 
-// ─── Save and render ────────────────────────────
+// ─── Handlers ─────────────────────────────────────
+
+async function serveFile(filePath: string, contentType: string) {
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) {
+    return new Response("Not found", { status: 404 });
+  }
+  return new Response(file, {
+    headers: { "Content-Type": contentType },
+  });
+}
+
+async function handleCapture(req: Request, cors: Record<string, string>) {
+  try {
+    const body = await req.json() as {
+      url: string;
+      data: string;
+      title?: string;
+      timestamp?: number;
+    };
+
+    if (!body.url || !body.data) {
+      return Response.json({ error: "Missing url or data" }, { status: 400, headers: cors });
+    }
+
+    const result = await saveAndRender(body.url, body.data, body.title);
+    console.log(`  \x1b[32m+\x1b[0m ${result.siteName}/${result.rawFilename} (${result.rawKB}KB -> ${result.renderedKB}KB)`);
+
+    return Response.json({
+      success: true,
+      site: result.siteName,
+      raw: result.rawFilename,
+      rendered: result.renderedFilename,
+      rawSize: result.rawKB,
+      renderedSize: result.renderedKB,
+    }, { headers: cors });
+  } catch (err: any) {
+    console.log(`  \x1b[31mx\x1b[0m Error: ${err.message}`);
+    return Response.json({ error: err.message }, { status: 500, headers: cors });
+  }
+}
+
+async function handleListSites(cors: Record<string, string>) {
+  try {
+    const entries = await readdir(DATA_DIR, { withFileTypes: true });
+    const sites = [];
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const siteName = entry.name;
+      const siteDir = join(DATA_DIR, siteName);
+      const files = await readdir(siteDir);
+
+      const captures = files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
+      const rendered = files.filter((f) => f.startsWith("rendered-") && f.endsWith(".html"));
+      const hasDesignMd = files.includes("design.md");
+
+      const pages = [];
+      for (const cap of captures) {
+        const slug = cap.replace("capture-", "").replace(".html", "");
+        const renderedFile = `rendered-${slug}.html`;
+        const hasRendered = rendered.includes(renderedFile);
+
+        let captureKB = "?";
+        try {
+          const s = await stat(join(siteDir, cap));
+          captureKB = (s.size / 1024).toFixed(0);
+        } catch {}
+
+        pages.push({
+          capture: cap,
+          rendered: hasRendered ? renderedFile : null,
+          slug,
+          captureKB,
+        });
+      }
+
+      sites.push({
+        name: siteName,
+        pages,
+        hasDesignMd,
+        pageCount: pages.length,
+      });
+    }
+
+    sites.sort((a, b) => a.name.localeCompare(b.name));
+
+    return Response.json({ sites }, { headers: cors });
+  } catch {
+    return Response.json({ sites: [] }, { headers: cors });
+  }
+}
+
+async function handleSiteDetail(siteName: string, cors: Record<string, string>) {
+  const siteDir = join(DATA_DIR, siteName);
+  try {
+    const files = await readdir(siteDir);
+    return Response.json({
+      name: siteName,
+      files,
+      hasDesignMd: files.includes("design.md"),
+    }, { headers: cors });
+  } catch {
+    return Response.json({ error: "Site not found" }, { status: 404, headers: cors });
+  }
+}
+
+async function handleGetDesignMd(siteName: string, cors: Record<string, string>) {
+  const filePath = join(DATA_DIR, siteName, "design.md");
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) {
+    return new Response("Not found", { status: 404, headers: cors });
+  }
+  return new Response(file, {
+    headers: { ...cors, "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+async function handleGenerateDesignMd(siteName: string, cors: Record<string, string>) {
+  const siteDir = join(DATA_DIR, siteName);
+  try {
+    const files = await readdir(siteDir);
+    const renderedFiles = files.filter((f) => f.startsWith("rendered-") && f.endsWith(".html"));
+
+    if (renderedFiles.length === 0) {
+      return Response.json({ error: "No rendered HTML files to extract from" }, { status: 400, headers: cors });
+    }
+
+    // Concatenate all rendered HTML for extraction
+    let allHtml = "";
+    const titles: string[] = [];
+    for (const f of renderedFiles) {
+      const html = await Bun.file(join(siteDir, f)).text();
+      allHtml += html + "\n";
+      const title = html.match(/<title>([^<]*)<\/title>/)?.[1];
+      if (title) titles.push(title);
+    }
+
+    const displayName = siteName.charAt(0).toUpperCase() + siteName.slice(1);
+    const md = generateDesignMd(allHtml, displayName);
+
+    const outPath = join(siteDir, "design.md");
+    await Bun.write(outPath, md);
+
+    console.log(`  \x1b[32m+\x1b[0m Generated ${siteName}/design.md (${(md.length / 1024).toFixed(1)}KB)`);
+
+    return Response.json({
+      success: true,
+      sizeKB: (md.length / 1024).toFixed(1),
+    }, { headers: cors });
+  } catch (err: any) {
+    return Response.json({ error: err.message }, { status: 500, headers: cors });
+  }
+}
+
+async function handlePreview(siteName: string, filename: string, cors: Record<string, string>) {
+  // Sanitize filename
+  const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "");
+  const filePath = join(DATA_DIR, siteName, safe);
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) {
+    return new Response("Not found", { status: 404 });
+  }
+  return new Response(file, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+async function handleDeletePage(siteName: string, captureFile: string, cors: Record<string, string>) {
+  const safe = captureFile.replace(/[^a-zA-Z0-9._-]/g, "");
+  const siteDir = join(DATA_DIR, siteName);
+
+  try {
+    // Delete capture file
+    const capPath = join(siteDir, safe);
+    if (await Bun.file(capPath).exists()) {
+      await unlink(capPath);
+    }
+
+    // Delete corresponding rendered file
+    const renderedFile = safe.replace("capture-", "rendered-");
+    const rendPath = join(siteDir, renderedFile);
+    if (await Bun.file(rendPath).exists()) {
+      await unlink(rendPath);
+    }
+
+    console.log(`  \x1b[33m-\x1b[0m Deleted ${siteName}/${safe}`);
+    return Response.json({ success: true }, { headers: cors });
+  } catch (err: any) {
+    return Response.json({ error: err.message }, { status: 500, headers: cors });
+  }
+}
+
+// ─── Save and render ──────────────────────────────
 
 async function saveAndRender(pageUrl: string, data: string, title?: string) {
   const parsed = new URL(pageUrl);
   const siteName = parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-");
   const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
 
-  const siteDir = join(".data", siteName);
+  const siteDir = join(DATA_DIR, siteName);
   await mkdir(siteDir, { recursive: true });
 
   // Save raw capture
