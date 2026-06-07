@@ -10,7 +10,7 @@ import { join, dirname } from "node:path";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 
 // Use the full INJECT_SCRIPT as-is — including the auto-trigger and Figma toolbar.
-// The extension's content script will watch for __DSC_DATA__ and send to server.
+// The extension's content script will watch for __DG_DATA__ and send to server.
 const captureJs = `// Figma capture engine — full version with toolbar
 ${INJECT_SCRIPT}
 `;

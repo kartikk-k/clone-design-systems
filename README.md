@@ -1,4 +1,4 @@
-# design-system-clone
+# Design Grab
 
 To install dependencies:
 

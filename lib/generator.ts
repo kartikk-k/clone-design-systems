@@ -66,7 +66,7 @@ function renderDesignMd(siteName: string, a: DesignAnalysis): string {
 
   l.push(`# Design System: ${siteName}`);
   l.push("");
-  l.push("> Auto-extracted from Figma via Design System Clone");
+  l.push("> Auto-extracted via Design Grab");
   l.push("> Preview: open `html/_full-page.html` in a browser");
   l.push("");
 

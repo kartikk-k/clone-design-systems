@@ -10,7 +10,7 @@ const WHITE = "\x1b[37m";
 
 export function banner() {
   console.log("");
-  console.log(`${CYAN}${BOLD}  Design System Clone${RESET}`);
+  console.log(`${CYAN}${BOLD}  Design Grab${RESET}`);
   console.log(`${DIM}  Extract any website's design system into a reusable spec${RESET}`);
   console.log("");
 }

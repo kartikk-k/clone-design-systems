@@ -30,7 +30,7 @@ export async function openBrowserAndWaitForCopy(url: string): Promise<void> {
   // Race: auto-detect clipboard write vs manual Enter press
   const autoDetect = page
     .waitForFunction(
-      () => (globalThis as any).__DSC_COPIED__ === true,
+      () => (globalThis as any).__DG_COPIED__ === true,
       null,
       { timeout: 0, polling: 1000 }
     )

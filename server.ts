@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Design System Clone — Dashboard + Capture Server
+ * Design Grab — Dashboard + Capture Server
  *
  * Serves the dashboard UI and receives captures from the Chrome extension.
  *
@@ -18,7 +18,7 @@ const port = parseInt(process.argv.find((_, i, a) => a[i - 1] === "--port") || "
 const DATA_DIR = join(import.meta.dir, ".data");
 
 console.log("");
-console.log("  \x1b[36m\x1b[1mDesign System Clone\x1b[0m");
+console.log("  \x1b[36m\x1b[1mDesign Grab\x1b[0m");
 console.log(`  \x1b[2mDashboard:  http://localhost:${port}\x1b[0m`);
 console.log(`  \x1b[2mCapture:    http://localhost:${port}/capture\x1b[0m`);
 console.log("");

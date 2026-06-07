@@ -7,7 +7,7 @@ const captureSectionBtn = document.getElementById("captureSection");
 const resultDiv = document.getElementById("result");
 const serverUrlInput = document.getElementById("serverUrl");
 
-const log = (...args) => console.log("[DSC Popup]", ...args);
+const log = (...args) => console.log("[DG Popup]", ...args);
 
 chrome.storage?.local?.get("serverUrl", (data) => {
   if (data.serverUrl) serverUrlInput.value = data.serverUrl;
@@ -72,22 +72,22 @@ capturePageBtn.addEventListener("click", async () => {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
-        console.log("[DSC] Cleaning up previous injection...");
+        console.log("[DG] Cleaning up previous injection...");
         // Reset all flags
-        window.__DSC_DATA__ = null;
-        window.__DSC_COPIED__ = false;
-        window.__DSC_INJECTED__ = false;
+        window.__DG_DATA__ = null;
+        window.__DG_COPIED__ = false;
+        window.__DG_INJECTED__ = false;
         // Remove Figma toolbar
         const bar = document.getElementById("__figma_capture_toolbar_host__");
         if (bar) {
           bar.remove();
-          console.log("[DSC] Removed existing Figma toolbar");
+          console.log("[DG] Removed existing Figma toolbar");
         } else {
-          console.log("[DSC] No existing toolbar found");
+          console.log("[DG] No existing toolbar found");
         }
         // Reset figma object
         window.figma = undefined;
-        console.log("[DSC] Cleanup complete");
+        console.log("[DG] Cleanup complete");
       },
       world: "MAIN",
     });
@@ -98,15 +98,15 @@ capturePageBtn.addEventListener("click", async () => {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: (code) => {
-        console.log("[DSC] Injecting capture script (" + code.length + " chars)...");
+        console.log("[DG] Injecting capture script (" + code.length + " chars)...");
         try {
           const fn = new Function(code);
           fn();
-          console.log("[DSC] Script injected successfully");
-          console.log("[DSC] figma object:", typeof window.figma);
-          console.log("[DSC] captureForDesign:", typeof window.figma?.captureForDesign);
+          console.log("[DG] Script injected successfully");
+          console.log("[DG] figma object:", typeof window.figma);
+          console.log("[DG] captureForDesign:", typeof window.figma?.captureForDesign);
         } catch (e) {
-          console.error("[DSC] Script injection error:", e.message);
+          console.error("[DG] Script injection error:", e.message);
         }
       },
       args: [scriptCode],
@@ -114,7 +114,7 @@ capturePageBtn.addEventListener("click", async () => {
     });
     log("Script injected");
 
-    // Step 3: Poll for __DSC_DATA__
+    // Step 3: Poll for __DG_DATA__
     log("Step 3: Polling for captured data...");
     const serverUrl = serverUrlInput.value;
     const tabId = tab.id;
@@ -129,29 +129,29 @@ capturePageBtn.addEventListener("click", async () => {
         const results = await chrome.scripting.executeScript({
           target: { tabId },
           func: () => {
-            const data = window.__DSC_DATA__;
-            const copied = window.__DSC_COPIED__;
+            const data = window.__DG_DATA__;
+            const copied = window.__DG_COPIED__;
             if (data) {
-              console.log("[DSC] Data found! Size:", data.length, "chars");
+              console.log("[DG] Data found! Size:", data.length, "chars");
               const captured = data;
               // Reset everything for next capture
-              window.__DSC_DATA__ = null;
-              window.__DSC_COPIED__ = false;
-              window.__DSC_INJECTED__ = false;
+              window.__DG_DATA__ = null;
+              window.__DG_COPIED__ = false;
+              window.__DG_INJECTED__ = false;
               window.figma = undefined;
               // Remove toolbar
               const bar = document.getElementById("__figma_capture_toolbar_host__");
               if (bar) {
                 bar.remove();
-                console.log("[DSC] Toolbar removed after capture");
+                console.log("[DG] Toolbar removed after capture");
               }
               return captured;
             }
             // Log progress every 10 attempts
-            if (window.__DSC_POLL_COUNT__ === undefined) window.__DSC_POLL_COUNT__ = 0;
-            window.__DSC_POLL_COUNT__++;
-            if (window.__DSC_POLL_COUNT__ % 50 === 0) {
-              console.log("[DSC] Still waiting... attempt", window.__DSC_POLL_COUNT__, "| __DSC_DATA__:", !!data, "| __DSC_COPIED__:", copied);
+            if (window.__DG_POLL_COUNT__ === undefined) window.__DG_POLL_COUNT__ = 0;
+            window.__DG_POLL_COUNT__++;
+            if (window.__DG_POLL_COUNT__ % 50 === 0) {
+              console.log("[DG] Still waiting... attempt", window.__DG_POLL_COUNT__, "| __DG_DATA__:", !!data, "| __DG_COPIED__:", copied);
             }
             return null;
           },

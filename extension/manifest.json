@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Design System Clone",
+  "name": "Design Grab",
   "version": "1.0",
-  "description": "Capture any website's design system — sends to local server",
+  "description": "Grab any website's design system — sends to local server",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "http://localhost:*/*",

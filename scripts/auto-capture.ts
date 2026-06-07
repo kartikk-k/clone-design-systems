@@ -74,12 +74,12 @@ for (const url of urls) {
       return new Promise<string | null>((resolve) => {
         const g = globalThis as any;
         if (!g.figma?.captureForDesign) { resolve(null); return; }
-        g.__DSC_DATA__ = null;
+        g.__DG_DATA__ = null;
         g.figma.captureForDesign({ selector: "body" });
         let attempts = 0;
         const check = setInterval(() => {
           attempts++;
-          if (g.__DSC_DATA__) { clearInterval(check); resolve(g.__DSC_DATA__); }
+          if (g.__DG_DATA__) { clearInterval(check); resolve(g.__DG_DATA__); }
           else if (attempts > 300) { clearInterval(check); resolve(null); }
         }, 100);
       });

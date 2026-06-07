@@ -17,9 +17,9 @@ export const INJECT_SCRIPT = `
 
   const _onCapture = (text) => {
     // Store data on window for Playwright to read
-    window.__DSC_DATA__ = text;
-    window.__DSC_COPIED__ = true;
-    console.log('[DSC] Capture complete, data size:', text.length);
+    window.__DG_DATA__ = text;
+    window.__DG_COPIED__ = true;
+    console.log('[DG] Capture complete, data size:', text.length);
     // Also try system clipboard (may fail silently)
     try {
       const ta = document.createElement('textarea');

@@ -1,4 +1,4 @@
-# TODO: Design System Clone — Next Steps
+# TODO: Design Grab — Next Steps
 
 ## Current State
 - The `scripts/render.ts` pipeline (figh2d → HTML) works well
@@ -13,14 +13,14 @@
 
 **Approach:**
 - Keep the same capture script (it serializes the DOM perfectly)
-- Instead of `navigator.clipboard.writeText()`, use `window.__DSC_DATA__ = serializedData`
-- Playwright can then read `window.__DSC_DATA__` and save it directly
+- Instead of `navigator.clipboard.writeText()`, use `window.__DG_DATA__ = serializedData`
+- Playwright can then read `window.__DG_DATA__` and save it directly
 - Remove the Figma-specific clipboard encoding (`<!--(figh2d)...-->` wrapper)
 - Save raw JSON directly
 
 **Files to modify:**
 - `lib/inject-script.ts` — modify clipboard stub to store data on window
-- `lib/browser.ts` — read `window.__DSC_DATA__` after capture, save to file
+- `lib/browser.ts` — read `window.__DG_DATA__` after capture, save to file
 - Keep the floating toolbar UI (Copy Entire Screen / Copy Section)
 
 ### 2. Add floating toolbar with custom controls
@@ -34,8 +34,8 @@
 - The current Figma script already HAS this toolbar (Entire screen + Select element)
 - Modify it to not call Figma's capture flow, but instead:
   1. Serialize the DOM using the existing `Bt()` function
-  2. Store result on `window.__DSC_DATA__`
-  3. Signal Playwright via `window.__DSC_COPIED__ = true`
+  2. Store result on `window.__DG_DATA__`
+  3. Signal Playwright via `window.__DG_COPIED__ = true`
 
 ### 3. Rebuild CLI without Figma dependencies
 **Goal:** New streamlined CLI flow:
@@ -76,7 +76,7 @@
 ## File Structure (Target)
 
 ```
-design-system-clone/
+designgrab/
   index.ts                    # CLI entry point
   lib/
     cli.ts                    # CLI utilities (select, prompts, colors)
