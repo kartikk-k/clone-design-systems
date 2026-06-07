@@ -16,8 +16,10 @@ import { INJECT_SCRIPT } from "./lib/inject-script.ts";
 import { parseFigH2D, buildAssetMap } from "./scripts/lib/parser.ts";
 import { renderNode, type RenderContext } from "./scripts/lib/renderer.ts";
 import { buildPage } from "./scripts/lib/template.ts";
+import { generateDesignMd } from "./scripts/lib/design-extractor.ts";
+import { extractComponents } from "./scripts/lib/component-extractor.ts";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 // ─── Helpers ────────────────────────────────────
 
@@ -286,14 +288,56 @@ async function main() {
     }
   }
 
-  // ── Step 3: Generate design.md ──
-  stepHeader(3, TOTAL_STEPS, "Design system");
-  info("design.md generation is available — run manually for best results.");
-  info("Use the rendered HTML files with the design.md prompt template.");
-  info(`Files are in: .data/${siteName!}/`);
+  // ── Step 3: Generate design.md + extracted components ──
+  stepHeader(3, TOTAL_STEPS, "Generating design system");
+
+  const captures = await getSiteCaptures(siteName!);
+  if (captures.length > 0) {
+    // Collect all rendered HTML files
+    const renderedPaths: string[] = [];
+    const renderedContents: string[] = [];
+    let combinedHtml = "";
+
+    for (const file of captures) {
+      const pathSlug = file.replace("capture-", "").replace(".html", "");
+      const renderedFilename = `rendered-${pathSlug}.html`;
+      const renderedPath = join(".data", siteName!, renderedFilename);
+      try {
+        const content = await Bun.file(renderedPath).text();
+        renderedPaths.push(renderedFilename);
+        renderedContents.push(content);
+        combinedHtml += content;
+      } catch {}
+    }
+
+    if (combinedHtml.length > 100) {
+      // Generate design.md from rendered HTML tokens
+      info("Extracting design tokens...");
+      const designMd = generateDesignMd(combinedHtml, siteName!);
+      const designPath = join(".data", siteName!, "design.md");
+      await Bun.write(designPath, designMd);
+      success(`design.md (${(designMd.length / 1024).toFixed(0)}KB)`);
+
+      // Generate extracted-components.html from all rendered pages
+      info("Extracting components...");
+      const componentsHtml = extractComponents(renderedPaths, renderedContents, siteName!);
+      const componentsPath = join(".data", siteName!, "extracted-components.html");
+      await Bun.write(componentsPath, componentsHtml);
+      success(`extracted-components.html (${(componentsHtml.length / 1024).toFixed(0)}KB)`);
+    } else {
+      warn("No rendered HTML found to analyze. Re-run to capture and render first.");
+    }
+  } else {
+    warn("No captures available for design extraction.");
+  }
 
   // ── Step 4: Summary ──
-  stepHeader(4, TOTAL_STEPS, "Done");
+  stepHeader(4, TOTAL_STEPS, "Summary");
+
+  info(`All files saved to .data/${siteName!}/`);
+
+  // ── Step 5: Done ──
+  stepHeader(5, TOTAL_STEPS, "Done");
 
   const siteFiles = await readdir(join(".data", siteName!));
   const captureCount = siteFiles.filter((f) => f.startsWith("capture-")).length;
