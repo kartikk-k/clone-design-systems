@@ -1,5 +1,6 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { readdir, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { chromium } from "playwright";
 import {
   banner,
   stepHeader,
@@ -11,40 +12,17 @@ import {
   waitForEnter,
   select,
 } from "./lib/cli.ts";
-import { openBrowserAndWaitForCopy } from "./lib/browser.ts";
-import {
-  parseFigmaUrls,
-  saveFigmaState,
-  isRawDataReady,
-  type FigmaFrame,
-} from "./lib/figma.ts";
-import {
-  processRawData,
-  saveChunks,
-  extractSections,
-  areSectionsFetched,
-  type SectionToFetch,
-} from "./lib/processor.ts";
-import { generateDesignFile } from "./lib/generator.ts";
+import { INJECT_SCRIPT } from "./lib/inject-script.ts";
+import { parseFigH2D, buildAssetMap } from "./scripts/lib/parser.ts";
+import { renderNode, type RenderContext } from "./scripts/lib/renderer.ts";
+import { buildPage } from "./scripts/lib/template.ts";
+
+const TOTAL_STEPS = 4;
+
+// ─── Helpers ────────────────────────────────────
 
 function extractSiteName(url: string): string {
-  const hostname = new URL(url).hostname;
-  return hostname
-    .replace(/^www\./, "")
-    .split(".")[0]!
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "-");
-}
-
-function collectFigmaUrls(): string[] {
-  const urls: string[] = [];
-  info("Paste one Figma frame URL per line. Enter an empty line when done.");
-  while (true) {
-    const line = prompt("  > ");
-    if (line === null || line.trim() === "") break;
-    urls.push(line.trim());
-  }
-  return urls;
+  return new URL(url).hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-");
 }
 
 async function getExistingSites(): Promise<string[]> {
@@ -56,314 +34,287 @@ async function getExistingSites(): Promise<string[]> {
   }
 }
 
-async function loadFigmaState(
-  dataDir: string
-): Promise<{ frames: FigmaFrame[]; status: string } | null> {
-  const stateFile = Bun.file(join(dataDir, "_figma-state.json"));
-  if (!(await stateFile.exists())) return null;
+async function getSiteCaptures(siteName: string): Promise<string[]> {
+  const dir = join(".data", siteName);
   try {
-    return await stateFile.json();
+    const files = await readdir(dir);
+    return files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
   } catch {
-    return null;
+    return [];
   }
 }
 
-// ─── Poll until files appear (with Enter fallback) ──────────────────
+// ─── Capture a URL ──────────────────────────────
 
-async function waitForFiles(
-  description: string,
-  checkFn: () => Promise<boolean>,
-  listMissing: () => Promise<void>
-): Promise<void> {
-  // Check immediately — maybe they already exist
-  if (await checkFn()) {
-    success(`${description} — all files found!`);
-    return;
-  }
+async function captureUrl(
+  browser: any,
+  url: string,
+  siteDir: string,
+  siteName: string
+): Promise<{ raw: string; rendered: string } | null> {
+  const parsed = new URL(url);
+  const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
 
-  await listMissing();
-  info("");
-  warn(`Waiting for ${description}...`);
-  info("(auto-detects when files appear, or press Enter to re-check)");
+  const context = await browser.newContext({ viewport: { width: 1470, height: 900 } });
+  const page = await context.newPage();
 
-  while (true) {
-    // Race: poll every 3s vs manual Enter
-    const poll = (async () => {
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 3000));
-        if (await checkFn()) return "found" as const;
-      }
-      return "timeout" as const;
-    })();
+  try {
+    info(`Loading ${url} ...`);
+    await page.goto(url, { waitUntil: "networkidle", timeout: 45000 }).catch(() =>
+      page.goto(url, { waitUntil: "load", timeout: 30000 })
+    );
 
-    const manual = new Promise<"enter">((resolve) => {
-      setTimeout(() => {
-        prompt("  \x1b[2mPress Enter to re-check...\x1b[0m");
-        resolve("enter");
-      }, 0);
+    // Wait for JS-rendered content
+    try {
+      await page.waitForFunction(
+        () => ((globalThis as any).document.body?.innerText?.trim()?.length || 0) > 200,
+        { timeout: 15000 }
+      );
+    } catch {
+      warn("Content detection timed out, proceeding anyway");
+    }
+    await page.waitForTimeout(2000);
+
+    info("Serializing DOM...");
+    await page.evaluate(INJECT_SCRIPT);
+
+    const capturedData: string | null = await page.evaluate(() => {
+      return new Promise<string | null>((resolve) => {
+        const g = globalThis as any;
+        if (!g.figma?.captureForDesign) { resolve(null); return; }
+        g.__DSC_DATA__ = null;
+        g.figma.captureForDesign({ selector: "body" });
+        let attempts = 0;
+        const check = setInterval(() => {
+          attempts++;
+          if (g.__DSC_DATA__) { clearInterval(check); resolve(g.__DSC_DATA__); }
+          else if (attempts > 300) { clearInterval(check); resolve(null); }
+        }, 100);
+      });
     });
 
-    const result = await Promise.race([poll, manual]);
-
-    if (result === "found") {
-      success(`${description} — all files detected!`);
-      return;
+    if (!capturedData) {
+      error("Failed to capture DOM data");
+      return null;
     }
 
-    // Manual enter or timeout — re-check
-    if (await checkFn()) {
-      success(`${description} — all files found!`);
-      return;
+    // Save raw capture
+    const rawFilename = `capture-${pathSlug}.html`;
+    let rawOutput: string;
+    if (capturedData.includes("figh2d)")) {
+      rawOutput = capturedData;
+    } else {
+      rawOutput = `<meta charset='utf-8'><html><head></head><body><span data-h2d="<!--(figh2d)${Buffer.from(capturedData).toString("base64")}(/figh2d)-->"></span></body></html>`;
     }
+    await Bun.write(join(siteDir, rawFilename), rawOutput);
 
-    warn("Still missing files:");
-    await listMissing();
-    info("Continuing to wait...");
+    // Render to HTML
+    const renderedFilename = `rendered-${pathSlug}.html`;
+    const renderedOutput = renderCapture(rawOutput);
+    await Bun.write(join(siteDir, renderedFilename), renderedOutput);
+
+    return {
+      raw: `${rawFilename} (${(rawOutput.length / 1024).toFixed(0)}KB)`,
+      rendered: `${renderedFilename} (${(renderedOutput.length / 1024).toFixed(0)}KB)`,
+    };
+  } finally {
+    await context.close();
   }
 }
 
-// ─── New website flow (Steps 1-4) ───────────────────────────────────
+// ─── Render a capture file to HTML ──────────────
 
-async function captureWebsite(): Promise<{
-  siteName: string;
-  dataDir: string;
-  frames: FigmaFrame[];
-}> {
-  // Step 1: Ask for website URL
-  stepHeader(1, 7, "Enter website URL");
-  const url = ask("Paste the website URL (e.g., https://stripe.com):");
+function renderCapture(rawHtml: string): string {
+  const data = parseFigH2D(rawHtml);
+  const assetMap = buildAssetMap(data);
+  const bodyNode = data.root.childNodes?.find((n) => n.tag === "BODY");
 
-  let siteName: string;
-  try {
-    siteName = extractSiteName(url);
-  } catch {
-    error("Invalid URL. Please provide a valid URL.", true);
-    process.exit(1);
-  }
+  const ctx: RenderContext = {
+    bodyFont: bodyNode?.styles?.fontFamily || "",
+    bodyColor: bodyNode?.styles?.color || "",
+    assetMap,
+  };
 
-  const dataDir = join(".data", siteName);
-  await mkdir(join(dataDir, "raw"), { recursive: true });
-  await mkdir(join(dataDir, "html"), { recursive: true });
-  success(`Data directory created: ${dataDir}/`);
+  const contentHtml = renderNode(bodyNode || data.root, 0, 0, 0, ctx);
 
-  // Step 2: Open browser with injected script
-  stepHeader(2, 7, "Opening browser");
-  info("A browser window will open with the Figma capture toolbar.");
-  info("Click 'Entire screen' to capture the page, then it will auto-copy to clipboard.");
-  await openBrowserAndWaitForCopy(url);
-  success("Page content copied to clipboard!");
-
-  // Step 3: Manual Figma paste
-  stepHeader(3, 7, "Paste into Figma");
-  info("Now paste the copied content into Figma:");
-  info("  1. Open Figma");
-  info("  2. Create a new file or open an existing one");
-  info("  3. Press Cmd+V (or Ctrl+V) to paste");
-  info("  4. Arrange the pasted frames as needed");
-  waitForEnter("Press Enter when you've pasted into Figma...");
-  success("Moving on.");
-
-  // Step 4: Ask for Figma frame link(s)
-  stepHeader(4, 7, "Enter Figma frame URLs");
-  const figmaUrlList = collectFigmaUrls();
-
-  if (figmaUrlList.length === 0) {
-    error("No Figma URLs provided.", true);
-    process.exit(1);
-  }
-
-  const frames = parseFigmaUrls(figmaUrlList);
-  success(`Parsed ${frames.length} Figma frame(s).`);
-
-  for (const f of frames) {
-    info(`  ${f.fileName}: fileKey=${f.fileKey} nodeId=${f.nodeId}`);
-  }
-
-  await saveFigmaState(dataDir, frames);
-  success("Figma state saved.");
-
-  return { siteName, dataDir, frames };
+  return buildPage({
+    title: data.documentTitle,
+    primaryFont: bodyNode?.styles?.fontFamily || "system-ui, sans-serif",
+    bgColor: bodyNode?.styles?.backgroundColor || "rgb(255, 255, 255)",
+    textColor: bodyNode?.styles?.color || "rgb(0, 0, 0)",
+    pageWidth: data.documentRect.width,
+    pageHeight: data.documentRect.height,
+    contentHtml,
+  });
 }
 
-// ─── Ensure raw data exists (Step 5) ────────────────────────────────
+// ─── Re-render existing captures ────────────────
 
-async function ensureRawData(
-  dataDir: string,
-  frames: FigmaFrame[]
-): Promise<void> {
-  stepHeader(5, 7, "Fetching Figma design data");
+async function reRenderSite(siteName: string) {
+  const siteDir = join(".data", siteName);
+  const captures = await getSiteCaptures(siteName);
 
-  info(`Need ${frames.length} raw data file(s):`);
-  for (const f of frames) {
-    const filePath = join(dataDir, "raw", f.fileName + ".json");
-    const exists = await Bun.file(filePath).exists();
-    info(`  ${exists ? "found" : "PENDING"}: ${filePath}`);
-  }
-
-  await waitForFiles(
-    "raw Figma data",
-    () => isRawDataReady(dataDir, frames),
-    async () => {
-      for (const f of frames) {
-        const filePath = join(dataDir, "raw", f.fileName + ".json");
-        const exists = await Bun.file(filePath).exists();
-        if (!exists) info(`  MISSING: ${filePath}`);
-      }
-    }
-  );
-}
-
-// ─── Ensure section code exists (Step 5.5) ──────────────────────────
-
-async function ensureSectionCode(dataDir: string): Promise<void> {
-  // Extract sections from sparse metadata if not done yet
-  const manifestFile = Bun.file(join(dataDir, "_sections-to-fetch.json"));
-  let manifest: { fileKey: string; sections: SectionToFetch[] };
-
-  if (!(await manifestFile.exists())) {
-    info("Analyzing page structure to identify sections...");
-    const result = await extractSections(dataDir);
-    manifest = { fileKey: result.fileKey, sections: result.sections };
-  } else {
-    manifest = await manifestFile.json();
-  }
-
-  if (manifest.sections.length === 0) {
-    warn("No sections identified. Processing with available data.");
+  if (captures.length === 0) {
+    warn("No captures found for " + siteName);
     return;
   }
 
-  // Create sections directory
-  await mkdir(join(dataDir, "raw", "sections"), { recursive: true });
+  for (const file of captures) {
+    const pathSlug = file.replace("capture-", "").replace(".html", "");
+    info(`Re-rendering ${file}...`);
 
-  info(`Need ${manifest.sections.length} section code file(s):`);
-  for (const s of manifest.sections) {
-    const filePath = join(dataDir, "raw", "sections", s.fileName + ".json");
-    const exists = await Bun.file(filePath).exists();
-    info(`  ${exists ? "found" : "PENDING"}: ${s.name} (${s.id}) → ${s.fileName}.json`);
+    const rawHtml = await Bun.file(join(siteDir, file)).text();
+    const renderedOutput = renderCapture(rawHtml);
+    const renderedFilename = `rendered-${pathSlug}.html`;
+    await Bun.write(join(siteDir, renderedFilename), renderedOutput);
+
+    success(`${renderedFilename} (${(renderedOutput.length / 1024).toFixed(0)}KB)`);
   }
-
-  const allFetched = await areSectionsFetched(dataDir);
-  if (allFetched) {
-    success("All section code files found!");
-    return;
-  }
-
-  await waitForFiles(
-    "section code data",
-    () => areSectionsFetched(dataDir),
-    async () => {
-      for (const s of manifest.sections) {
-        const filePath = join(dataDir, "raw", "sections", s.fileName + ".json");
-        const exists = await Bun.file(filePath).exists();
-        if (!exists) info(`  MISSING: ${s.fileName}.json (nodeId=${s.id}, fileKey=${s.fileKey})`);
-      }
-    }
-  );
 }
 
-// ─── Process + Generate (Steps 6-7) ────────────────────────────────
-
-async function processAndGenerate(
-  dataDir: string,
-  siteName: string
-): Promise<void> {
-  // Step 6: Process raw data
-  stepHeader(6, 7, "Processing design data");
-  const chunks = await processRawData(dataDir);
-  await saveChunks(dataDir, chunks);
-  success(`Processed ${chunks.length} chunk(s).`);
-
-  // Step 7: Generate design.md
-  stepHeader(7, 7, "Generating design system");
-  await generateDesignFile(dataDir, siteName);
-  success(`Design system generated!`);
-}
-
-// ─── Main ──────────────────────────────────────────────────────────
+// ─── Main ───────────────────────────────────────
 
 async function main() {
   const startTime = Date.now();
   banner();
-  info(`Started at ${new Date().toLocaleTimeString()}`);
 
   const existingSites = await getExistingSites();
 
+  // ── Step 1: Choose mode ──
   let siteName: string;
-  let dataDir: string;
-  let frames: FigmaFrame[];
+  let siteDir: string;
+  let urls: string[] = [];
+  let isNew = true;
 
   if (existingSites.length > 0) {
     console.log("");
     const options = [
-      "New website (start from scratch)",
+      "New website",
       ...existingSites.map((s) => `Resume: ${s}`),
     ];
     const choice = await select("What would you like to do?", options);
 
     if (choice === 0) {
-      const result = await captureWebsite();
-      siteName = result.siteName;
-      dataDir = result.dataDir;
-      frames = result.frames;
+      isNew = true;
     } else {
+      isNew = false;
       siteName = existingSites[choice - 1]!;
-      dataDir = join(".data", siteName);
-      success(`Resuming: ${siteName}`);
-
-      const state = await loadFigmaState(dataDir);
-
-      if (state && state.frames && state.frames.length > 0) {
-        frames = state.frames;
-        info(`Found ${frames.length} Figma frame(s) in state file.`);
-        for (const f of frames) {
-          info(`  ${f.fileName}: fileKey=${f.fileKey} nodeId=${f.nodeId}`);
-        }
-      } else {
-        warn("No Figma state found. You need to provide Figma frame URLs.");
-        stepHeader(4, 7, "Enter Figma frame URLs");
-        const figmaUrlList = collectFigmaUrls();
-
-        if (figmaUrlList.length === 0) {
-          error("No Figma URLs provided.", true);
-          process.exit(1);
-        }
-
-        frames = parseFigmaUrls(figmaUrlList);
-        success(`Parsed ${frames.length} Figma frame(s).`);
-        for (const f of frames) {
-          info(`  ${f.fileName}: fileKey=${f.fileKey} nodeId=${f.nodeId}`);
-        }
-        await saveFigmaState(dataDir, frames);
-        success("Figma state saved.");
-      }
+      siteDir = join(".data", siteName);
     }
-  } else {
-    const result = await captureWebsite();
-    siteName = result.siteName;
-    dataDir = result.dataDir;
-    frames = result.frames;
   }
 
-  // Step 5: Ensure raw data files exist (waits if missing)
-  await ensureRawData(dataDir, frames);
+  if (isNew) {
+    // ── Step 1: Enter URLs ──
+    stepHeader(1, TOTAL_STEPS, "Enter website URLs");
+    info("Enter one URL per line. Empty line to finish.");
 
-  // Step 5.5: Ensure section code exists (waits if missing)
-  await ensureSectionCode(dataDir);
+    urls = [];
+    while (true) {
+      const line = prompt("  > ");
+      if (line === null || line.trim() === "") break;
+      try {
+        new URL(line.trim());
+        urls.push(line.trim());
+      } catch {
+        warn("Invalid URL, skipping: " + line.trim());
+      }
+    }
 
-  // Steps 6-7: Process and generate
-  await processAndGenerate(dataDir, siteName);
+    if (urls.length === 0) {
+      error("No URLs provided.", true);
+      return;
+    }
 
-  // Final summary
+    siteName = extractSiteName(urls[0]!);
+    siteDir = join(".data", siteName);
+    await mkdir(siteDir, { recursive: true });
+    success(`Site: ${siteName} (${urls.length} URL(s))`);
+
+    // ── Step 2: Capture ──
+    stepHeader(2, TOTAL_STEPS, "Capturing pages");
+    info("Opening browser (visible mode for bot detection)...");
+
+    const browser = await chromium.launch({ headless: false });
+
+    for (const url of urls) {
+      info("");
+      const result = await captureUrl(browser, url, siteDir, siteName);
+      if (result) {
+        success(`Raw:      ${result.raw}`);
+        success(`Rendered: ${result.rendered}`);
+      }
+    }
+
+    await browser.close();
+    success("Browser closed. All pages captured.");
+  } else {
+    // ── Resume: Re-render existing captures ──
+    stepHeader(2, TOTAL_STEPS, "Re-rendering captures");
+
+    const captures = await getSiteCaptures(siteName!);
+    if (captures.length > 0) {
+      info(`Found ${captures.length} capture(s) for ${siteName!}`);
+      await reRenderSite(siteName!);
+    } else {
+      warn("No captures found. Add URLs to capture new pages.");
+      stepHeader(1, TOTAL_STEPS, "Enter website URLs");
+      info("Enter one URL per line. Empty line to finish.");
+
+      while (true) {
+        const line = prompt("  > ");
+        if (line === null || line.trim() === "") break;
+        try {
+          new URL(line.trim());
+          urls.push(line.trim());
+        } catch {
+          warn("Invalid URL: " + line.trim());
+        }
+      }
+
+      if (urls.length > 0) {
+        stepHeader(2, TOTAL_STEPS, "Capturing pages");
+        const browser = await chromium.launch({ headless: false });
+        for (const url of urls) {
+          const result = await captureUrl(browser, url, siteDir!, siteName!);
+          if (result) {
+            success(`Raw: ${result.raw}`);
+            success(`Rendered: ${result.rendered}`);
+          }
+        }
+        await browser.close();
+      }
+    }
+  }
+
+  // ── Step 3: Generate design.md ──
+  stepHeader(3, TOTAL_STEPS, "Design system");
+  info("design.md generation is available — run manually for best results.");
+  info("Use the rendered HTML files with the design.md prompt template.");
+  info(`Files are in: .data/${siteName!}/`);
+
+  // ── Step 4: Summary ──
+  stepHeader(4, TOTAL_STEPS, "Done");
+
+  const siteFiles = await readdir(join(".data", siteName!));
+  const captureCount = siteFiles.filter((f) => f.startsWith("capture-")).length;
+  const renderedCount = siteFiles.filter((f) => f.startsWith("rendered-")).length;
+
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
   console.log("");
-  console.log(
-    `  \x1b[32m\x1b[1mDone!\x1b[0m Your design system has been extracted. (${elapsed}s)`
-  );
+  console.log(`  \x1b[32m\x1b[1mComplete!\x1b[0m (${elapsed}s)`);
   console.log("");
-  info(`Design file: ${join(dataDir, "design.md")}`);
-  info(`HTML chunks:  ${join(dataDir, "html/")}`);
-  info(`Raw data:     ${join(dataDir, "raw/")}`);
+  info(`Site: ${siteName!}`);
+  info(`Captures: ${captureCount}`);
+  info(`Rendered: ${renderedCount}`);
+  info(`Directory: .data/${siteName!}/`);
+  console.log("");
+
+  // List all files
+  for (const f of siteFiles.sort()) {
+    const size = (await Bun.file(join(".data", siteName!, f)).size) / 1024;
+    info(`  ${f} (${size.toFixed(0)}KB)`);
+  }
   console.log("");
 }
 

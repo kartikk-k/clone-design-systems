@@ -1,0 +1,707 @@
+<!--
+  ============================================================
+  OPENAI DESIGN SYSTEM - EXTRACTED COMPONENT PATTERNS
+  Source: openai-rendered.html (OpenAI Residency page)
+  ============================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>OpenAI Component Patterns</title>
+
+<!-- ============================================================
+     GLOBAL STYLES (from page)
+     ============================================================ -->
+<style>
+  /* Reset */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "OpenAI Sans", sans-serif;
+    color: rgb(255, 255, 255);
+    background-color: rgb(0, 0, 0);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Element resets */
+  img { display: block; }
+  a { color: inherit; text-decoration: inherit; }
+  button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; appearance: none; }
+
+  /* Font fallback mappings */
+  @font-face { font-family: 'OpenAI Sans'; src: local('Inter'), local('Helvetica Neue'); font-weight: 100 900; }
+  @font-face { font-family: 'sohne-var'; src: local('Inter'), local('Helvetica Neue'); font-weight: 100 900; }
+
+  /* Layout helper for this demo */
+  .component-section {
+    padding: 40px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    margin-bottom: 40px;
+  }
+  .component-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 24px;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     1. NAVIGATION BAR
+     ============================================================
+
+     DESIGN TOKENS:
+     - Header height: 64px
+     - Background: rgb(0, 0, 0)
+     - Page width: 1470px, inner: 1440px, content: 1376px
+     - Nav font: 13px, weight 500, line-height 19.68px
+     - Body font: 17px, letter-spacing -0.17px, line-height 27.999px
+     - Logo: OpenAI wordmark SVG, 62.77px x 17px, white
+     - Right side buttons container: 242px wide
+
+     STRUCTURE:
+     header > div (1470x64, bg black, flex)
+       > div (1440x64, centered, flex)
+         > div (1376x64, flex)
+           > a (logo, 63x64)
+           > nav (contains ul of links)
+           > div (search button)
+           > div (Log in + Try ChatGPT buttons)
+-->
+
+<!-- === 1a. LOGO === -->
+<div class="component-section">
+<span class="component-label">1a. Logo</span>
+
+<a style="width: 63px; height: 64px; align-items: center; display: flex;" href="/">
+  <span style="width: 63px; height: 17px; align-items: center; display: flex;">
+    <div style="width: 62.7656px; height: 17px; overflow: hidden;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="62.7656px" fill="none" viewBox="0 0 288 78" style="height: 17px; width: auto;" color="rgb(255, 255, 255)">
+        <path fill="rgb(255, 255, 255)" d="M30.6.398C13.77.398 0 14.168 0 30.998s13.77 30.6 30.6 30.6 30.6-13.685 30.6-30.6S47.515.398 30.6.398m0 50.235c-10.455 0-18.87-8.585-18.87-19.635s8.415-19.635 18.87-19.635 18.87 8.585 18.87 19.635-8.415 19.635-18.87 19.635m61.54-33.235c-5.526 0-10.88 2.21-13.686 5.95v-5.1h-11.05v59.5h11.05V56.243c2.805 3.485 7.99 5.355 13.685 5.355 11.9 0 21.25-9.35 21.25-22.1s-9.35-22.1-21.25-22.1m-1.87 34.595c-6.29 0-11.9-4.93-11.9-12.495s5.61-12.495 11.9-12.495 11.899 4.93 11.899 12.495-5.61 12.495-11.9 12.495m49.133-34.595c-12.07 0-21.59 9.435-21.59 22.1s8.33 22.1 21.93 22.1c11.135 0 18.275-6.715 20.485-14.28h-10.795c-1.36 3.145-5.185 5.355-9.775 5.355-5.695 0-10.03-3.995-11.05-9.69h32.13v-4.335c0-11.56-8.075-21.25-21.335-21.25m-10.71 17.765c1.19-5.355 5.61-8.84 10.965-8.84 5.695 0 10.03 3.74 10.54 8.84zm61.454-17.765c-4.93 0-10.115 2.21-12.495 5.865v-5.015H166.6v42.5h11.05V37.883c0-6.63 3.57-10.965 9.35-10.965 5.355 0 8.245 4.08 8.245 9.775v24.055h11.05v-25.84c0-10.54-6.46-17.51-16.15-17.51M234.596 1.25l-24.055 59.5h11.815l5.1-13.005h27.37l5.1 13.005h11.985l-23.885-59.5zm-3.315 36.635 9.86-24.905 9.775 24.905zM287.636 1.25h-11.22v59.5h11.22z"></path>
+      </svg>
+    </div>
+  </span>
+</a>
+</div>
+
+<!-- === 1b. NAV LINKS === -->
+<div class="component-section">
+<span class="component-label">1b. Nav Links (Research, Products, Business, Developers, Company, Foundation)</span>
+
+<!--
+  DESIGN TOKENS:
+  - Container: ul, 571px wide, 64px tall, display: flex, overflow hidden-y auto
+  - Each li: 64px tall, display: flex, align-items: center
+  - Link text: 13px, font-weight 500, line-height 19.68px, color white
+  - Some links are <a href>, some are <button> (with dropdown)
+  - Spacing: Items are absolutely positioned horizontally
+-->
+
+<ul style="position: relative; width: 571px; height: 64px; align-items: baseline; display: flex; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px; list-style-type: none; overflow: hidden auto; white-space: nowrap">
+  <!-- Research (link) -->
+  <li style="position: absolute; left: 0px; top: 0px; width: 88px; height: 64px; align-items: center; display: flex; list-style-type: none;">
+    <a style="width: 88px; height: 64px; align-items: center; display: flex;" href="/research/index/">
+      <span style="width: 88px; height: 20px; align-items: center; display: flex; font-size: 13px; font-weight: 500; line-height: 19.68px;">
+        <span style="padding-left: 16px; font-size: 13px; font-weight: 500;">Research</span>
+      </span>
+    </a>
+  </li>
+  <!-- Products (button with dropdown) -->
+  <li style="position: absolute; left: 87.6px; top: 0px; width: 86px; height: 64px; align-items: center; display: flex; list-style-type: none;">
+    <button style="width: 86px; height: 64px; align-items: center; display: flex; text-align: center;">
+      <span style="width: 86px; height: 20px; align-items: center; display: flex; font-size: 13px; font-weight: 500; line-height: 19.68px;">
+        <span style="padding-left: 16px; font-size: 13px; font-weight: 500;">Products</span>
+      </span>
+    </button>
+  </li>
+  <!-- Pattern repeats for Business, Developers, Company, Foundation -->
+</ul>
+</div>
+
+<!-- === 1c. SEARCH ICON BUTTON === -->
+<div class="component-section">
+<span class="component-label">1c. Search Icon Button</span>
+
+<!--
+  DESIGN TOKENS:
+  - 40x40px circle button
+  - border-radius: 9999px (full circle)
+  - icon color: rgba(255, 255, 255, 0.6)
+  - icon size: 16x16px
+  - Magnifying glass SVG (stroke, not fill)
+-->
+
+<button style="width: 40px; height: 40px; align-items: center; border-radius: 9999px; color: rgba(255, 255, 255, 0.6); display: flex; justify-content: center; text-align: center;">
+  <div style="width: 16px; height: 16px; color: rgba(255, 255, 255, 0.6); overflow: hidden;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16px" fill="none" viewBox="0 0 16 16" color="rgba(255, 255, 255, 0.6)" display="block" height="16px">
+      <path stroke="rgba(255, 255, 255, 0.6)" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m13.833 13.833-3.13-3.13m0 0a5 5 0 1 0-7.071-7.071 5 5 0 0 0 7.07 7.07" fill="none"></path>
+    </svg>
+  </div>
+</button>
+</div>
+
+<!-- === 1d. LOG IN BUTTON (Ghost/Semi-transparent) === -->
+<div class="component-section">
+<span class="component-label">1d. Log In Button (Ghost variant)</span>
+
+<!--
+  DESIGN TOKENS:
+  - 96x36px
+  - background-color: rgba(255, 255, 255, 0.12) (12% white)
+  - border-radius: 40px (pill shape)
+  - font-size: 14px, font-weight: 500, line-height: 14px
+  - text color: white (inherited)
+  - horizontal padding: 20px
+  - Has dropdown chevron icon (12x12px SVG)
+-->
+
+<button style="width: 96px; height: 36px; align-items: center; background-color: rgba(255, 255, 255, 0.12); border-radius: 40px; display: flex; font-size: 14px; font-weight: 500; justify-content: center; line-height: 14px; text-align: center; white-space: nowrap;">
+  <span style="padding-left: 20px;">Log in</span>
+  <div style="margin-left: 4px; width: 12px; height: 12px; overflow: hidden;">
+    <!-- Chevron down SVG -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="12px" fill="none" viewBox="0 0 10 16" color="rgb(255, 255, 255)" display="block" height="12px">
+      <path fill="rgb(255, 255, 255)" d="M.21 5.352a.714.714 0 0 1 1.01 0L5 9.132l3.78-3.78a.714.714 0 0 1 1.01 1.01l-4.285 4.286a.714.714 0 0 1-1.01 0L.209 6.362a.714.714 0 0 1 0-1.01"></path>
+    </svg>
+  </div>
+</button>
+</div>
+
+<!-- === 1e. TRY CHATGPT BUTTON (Primary) === -->
+<div class="component-section">
+<span class="component-label">1e. Try ChatGPT Button (Primary variant)</span>
+
+<!--
+  DESIGN TOKENS:
+  - 138x36px
+  - background-color: rgb(255, 255, 255) (solid white)
+  - border-radius: 40px (pill shape)
+  - font-size: 14px, font-weight: 500, line-height: 14px
+  - text color: rgb(0, 0, 0) (black text on white bg)
+  - horizontal padding: 20px
+  - Has arrow icon (11x12px SVG, black stroke)
+-->
+
+<a style="width: 138px; height: 36px; align-items: center; background-color: rgb(255, 255, 255); border-radius: 40px; display: flex; font-size: 14px; font-weight: 500; justify-content: center; line-height: 14px; white-space: nowrap; color: rgb(0, 0, 0)" href="https://chatgpt.com/">
+  <span style="padding-left: 20px;">Try ChatGPT</span>
+  <div style="margin-left: 5px; width: 11px; height: 12px; overflow: hidden;">
+    <!-- Arrow icon (top-right direction) -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="11px" fill="none" viewBox="0 0 11 12" display="block" height="12px">
+      <path stroke="rgb(0, 0, 0)" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M1.71 4.5h6.07m0 0v6.07m0-6.07-7 7" fill="none"></path>
+    </svg>
+  </div>
+</a>
+</div>
+
+
+<!-- ============================================================
+     2. BUTTONS - ALL VARIANTS
+     ============================================================ -->
+
+<!-- === 2a. PRIMARY BUTTON (white bg, black text) === -->
+<div class="component-section">
+<span class="component-label">2a. Primary Button (white bg, dark text)</span>
+
+<!--
+  DESIGN TOKENS:
+  - background-color: rgb(255, 255, 255)
+  - color: rgb(0, 0, 0)
+  - border-radius: 40px (pill)
+  - font-size: 14px, font-weight: 500, line-height: 14px
+  - height: 36px (nav size) or 40px (body size)
+  - padding: 0 20px
+  - Optional: arrow icon for external links
+-->
+
+<a style="width: 138px; height: 36px; align-items: center; background-color: rgb(255, 255, 255); border-radius: 40px; display: flex; font-size: 14px; font-weight: 500; justify-content: center; line-height: 14px; white-space: nowrap; color: rgb(0, 0, 0)" href="#">
+  <span style="padding-left: 20px;">Try ChatGPT</span>
+  <div style="margin-left: 5px; width: 11px; height: 12px; overflow: hidden;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="11px" fill="none" viewBox="0 0 11 12" display="block" height="12px">
+      <path stroke="rgb(0, 0, 0)" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M1.71 4.5h6.07m0 0v6.07m0-6.07-7 7" fill="none"></path>
+    </svg>
+  </div>
+</a>
+</div>
+
+<!-- === 2b. GHOST BUTTON (semi-transparent white bg) === -->
+<div class="component-section">
+<span class="component-label">2b. Ghost Button (semi-transparent bg)</span>
+
+<!--
+  DESIGN TOKENS:
+  - background-color: rgba(255, 255, 255, 0.12) (12% white)
+  - color: white (inherited)
+  - border-radius: 40px (pill)
+  - font-size: 14px, font-weight: 500
+  - height: 36px (nav) or 40px (body)
+  - padding: 0 20px
+  - Used for: Log in, View all open roles
+-->
+
+<!-- Nav size (36px) -->
+<button style="width: 96px; height: 36px; align-items: center; background-color: rgba(255, 255, 255, 0.12); border-radius: 40px; display: flex; font-size: 14px; font-weight: 500; justify-content: center; line-height: 14px; white-space: nowrap;">
+  <span>Log in</span>
+</button>
+
+<br><br>
+
+<!-- Body size (40px) -->
+<a style="width: 159px; height: 40px; align-items: center; background-color: rgba(255, 255, 255, 0.12); border-radius: 40px; display: flex; font-size: 14px; font-weight: 500; justify-content: center; line-height: 14px; white-space: nowrap;" href="/careers/search/">
+  <span>View all open roles</span>
+</a>
+</div>
+
+<!-- === 2c. DARK BUTTON (dark gray bg) === -->
+<div class="component-section">
+<span class="component-label">2c. Dark Button (footer language selector)</span>
+
+<!--
+  DESIGN TOKENS:
+  - background-color: rgb(31, 31, 31)
+  - border-radius: 9999px (full pill)
+  - font-size: 14px, font-weight: 500
+  - height: 40px
+  - Used for: Language/region selector in footer
+-->
+
+<button style="width: 207px; height: 40px; align-items: center; background-color: rgb(31, 31, 31); border-radius: 9999px; display: flex; font-size: 14px; font-weight: 500; justify-content: center; line-height: 14px; text-align: center; white-space: nowrap;">
+  <span>English</span>
+  <span style="margin-left: 8px; color: rgba(255,255,255,0.6)">United States</span>
+</button>
+</div>
+
+<!-- === 2d. TEXT/ICON BUTTON (no background - search, accordion toggle) === -->
+<div class="component-section">
+<span class="component-label">2d. Icon-only Button (no background)</span>
+
+<!--
+  DESIGN TOKENS:
+  - No background-color
+  - border-radius: 9999px (for search) or none (for accordion)
+  - Various sizes: 40x40 (search), 676x60 (accordion trigger)
+  - Icon color: rgba(255,255,255,0.6) for search, rgb(255,255,255) for accordion
+-->
+
+<!-- Search (icon-only, circular hit area) -->
+<button style="width: 40px; height: 40px; align-items: center; border-radius: 9999px; color: rgba(255, 255, 255, 0.6); display: flex; justify-content: center;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="16px" fill="none" viewBox="0 0 16 16" height="16px">
+    <path stroke="rgba(255, 255, 255, 0.6)" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m13.833 13.833-3.13-3.13m0 0a5 5 0 1 0-7.071-7.071 5 5 0 0 0 7.07 7.07" fill="none"></path>
+  </svg>
+</button>
+</div>
+
+
+<!-- ============================================================
+     3. CARDS
+     ============================================================ -->
+
+<!-- === 3a. RESEARCH PAPER CARD (image + title + meta) === -->
+<div class="component-section">
+<span class="component-label">3a. Research Paper Card</span>
+
+<!--
+  DESIGN TOKENS:
+  - Card container: 326px wide, ~425px tall
+  - Image area: 326x326px, border-radius: 6.08px, overflow: hidden, object-fit: cover
+  - Image placeholder bg: rgba(255, 255, 255, 0.2), same border-radius
+  - Link area: 326px wide, starts at top: 326px (below image), 16px top padding
+  - Title: font-size 18px, font-weight 500, letter-spacing -0.18px, line-height 23.76px
+  - Title container width: 294px (narrower than card)
+  - Meta row: font-size 14px, font-weight 500, line-height 19.6px
+  - Category label (e.g. "Publication"): white, 14px
+  - Date: color rgba(255, 255, 255, 0.6), 14px, white-space: nowrap
+  - Gap between category and date: ~12px
+-->
+
+<div style="position: relative; width: 326px; height: 425px;">
+  <!-- Image placeholder background -->
+  <div style="position: absolute; left: 0px; top: 0px; width: 326px; height: 326px; background-color: rgba(255, 255, 255, 0.2); border-radius: 6.08px;"></div>
+  <!-- Image container (overflow hidden, rounded) -->
+  <div style="position: absolute; left: 0px; top: 0px; width: 326px; height: 326px; border-radius: 6.08px; overflow: hidden;">
+    <img src="" alt="Improving Mathematical Reasoning With Process Supervision" style="width: 326px; height: 326px; object-fit: cover;" />
+  </div>
+  <!-- Link area -->
+  <a style="position: absolute; left: 0px; top: 326px; width: 326px; height: 99px; display: block; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;" href="/index/improving-mathematical-reasoning-with-process-supervision/">
+    <div style="position: absolute; left: 0px; top: 16px; width: 326px; height: 83px;">
+      <!-- Title -->
+      <div style="position: absolute; left: 0px; top: 0px; width: 326px; height: 48px; font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">
+        <p style="width: 294px; height: 48px; font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">
+          <span>Improving mathematical reasoning with process supervision</span>
+        </p>
+      </div>
+      <!-- Meta row -->
+      <p style="position: absolute; left: 0px; top: 63.5px; width: 326px; height: 20px; display: flex; font-size: 14px; font-weight: 500; line-height: 19.6px;">
+        <span style="font-size: 14px; font-weight: 500; line-height: 19.6px;">Publication</span>
+        <time style="margin-left: 12px; color: rgba(255, 255, 255, 0.6); font-size: 14px; font-weight: 500; line-height: 19.6px; white-space: nowrap;">May 31, 2023</time>
+      </p>
+    </div>
+  </a>
+</div>
+</div>
+
+<!-- === 3b. TESTIMONIAL / BLOCKQUOTE CARD === -->
+<div class="component-section">
+<span class="component-label">3b. Testimonial / Blockquote</span>
+
+<!--
+  DESIGN TOKENS:
+  - Container: display grid, centered
+  - Blockquote: font-size 30px, font-weight 500, letter-spacing -0.75px, line-height 39.6px
+  - Text alignment: center
+  - Attribution: font-size 14px, font-weight 500, line-height 19.6px, centered below quote
+  - Quote marks included in text content (curly quotes)
+-->
+
+<div style="position: relative; width: 877px; margin: 0 auto;">
+  <blockquote style="font-size: 30px; font-weight: 500; letter-spacing: -0.75px; line-height: 39.6px; text-align: center;">
+    <span>"This program is an excellent way for people who are curious, passionate, and skilled to sharpen their focus on AI and machine learning—and to help us invent the future."</span>
+  </blockquote>
+  <div style="margin-top: 32px; font-size: 14px; font-weight: 500; line-height: 19.6px; text-align: center;">
+    <span>Sam Altman, CEO of OpenAI</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ============================================================
+     4. TYPOGRAPHY EXAMPLES
+     ============================================================ -->
+<div class="component-section">
+<span class="component-label">4. Typography Scale</span>
+
+<!--
+  TYPOGRAPHY SCALE (from largest to smallest):
+
+  H1 (Hero):      64px, weight 500, letter-spacing -1.92px, line-height 64px, center-aligned
+  H2 (CTA):       48px, weight 500, letter-spacing -1.44px, line-height 55.68px, center-aligned
+  H2 (Section):   30px, weight 500, letter-spacing -0.3px, line-height 39.6px
+  H2 (Subsection):22px, weight 500, letter-spacing -0.22px, line-height 27.72px
+  H3 (FAQ title): 30px, weight 500, letter-spacing -0.3px, line-height 39.6px, center-aligned
+  H3 (FAQ item):  17px, weight 400, letter-spacing -0.17px, line-height 27.999px
+  Body:           17px, weight 400, letter-spacing -0.17px, line-height 27.999px
+  Body (small):   14px, weight 400, letter-spacing -0.14px, line-height 22.96px
+  Nav link:       13px, weight 500, line-height 19.68px
+  Label/Meta:     14px, weight 500, line-height 19.6px
+  Label (small):  13px, weight 500, line-height 19.68px, color rgba(255,255,255,0.6)
+-->
+
+<!-- H1: 64px -->
+<h1 style="font-size: 64px; font-weight: 500; letter-spacing: -1.92px; line-height: 64px; text-align: center;">
+  <span>OpenAI Residency</span>
+</h1>
+
+<br>
+
+<!-- H2 (CTA): 48px -->
+<h2 style="font-size: 48px; font-weight: 500; letter-spacing: -1.44px; line-height: 55.68px; text-align: center;">
+  <span>Join us in shaping the future of technology.</span>
+</h2>
+
+<br>
+
+<!-- H2 (Section): 30px -->
+<h2 style="font-size: 30px; font-weight: 500; letter-spacing: -0.3px; line-height: 39.6px;">
+  <span>About the program</span>
+</h2>
+
+<br>
+
+<!-- H2 (Subsection): 22px -->
+<h2 style="font-size: 22px; font-weight: 500; letter-spacing: -0.22px; line-height: 27.72px;">
+  <span>Resident research</span>
+</h2>
+
+<br>
+
+<!-- H2 (Small label): 13px, muted -->
+<h2 style="font-size: 13px; font-weight: 500; line-height: 19.68px; color: rgba(255, 255, 255, 0.6);">
+  <span>Explore Research</span>
+</h2>
+
+<br>
+
+<!-- Body: 17px -->
+<p style="font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;">
+  <span>Our 6-month program accelerates talented builders and early researchers from any domain, giving them the mentorship and environment to do real research at the frontier of AI.</span>
+</p>
+
+<br>
+
+<!-- Bold body text -->
+<p style="font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;">
+  <b style="font-weight: 600;">Applications for the 2026 Residency are now closed.</b>
+</p>
+
+<br>
+
+<!-- Small body (answer text): 14px, muted -->
+<p style="font-size: 14px; letter-spacing: -0.14px; line-height: 22.96px; color: rgba(255, 255, 255, 0.6);">
+  <span>No. The Residency is not an internship. For those Residents who perform well we extend full-time offers to join OpenAI immediately upon completion of the six-months Residency.</span>
+</p>
+</div>
+
+
+<!-- ============================================================
+     5. LIST ITEMS (Research papers)
+     ============================================================ -->
+<div class="component-section">
+<span class="component-label">5. Research Paper List Items</span>
+
+<!--
+  DESIGN TOKENS:
+  - Each item is an <a> tag, 326px wide, variable height
+  - Top padding: 16px from top of link area
+  - Title: <p> 294px wide, font-size 18px, weight 500, letter-spacing -0.18px, line-height 23.76px
+  - Meta row: font-size 14px, weight 500, line-height 19.6px
+  - Category (e.g., "Publication"): white text
+  - Date (<time>): color rgba(255, 255, 255, 0.6), white-space: nowrap
+  - Gap between category and date: ~12.5px
+  - These items appear below card images in a grid layout
+
+  NOTE: This page does NOT have a standalone text-only list.
+  Research papers appear as image cards (see section 3a).
+  Below are the link/meta portions extracted from those cards.
+-->
+
+<!-- List item 1 -->
+<a style="display: block; width: 326px; height: 99px; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;" href="/index/improving-mathematical-reasoning-with-process-supervision/">
+  <div style="padding-top: 16px;">
+    <div style="font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">
+      <p style="width: 294px; font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">Improving mathematical reasoning with process supervision</p>
+    </div>
+    <p style="margin-top: 15px; display: flex; font-size: 14px; font-weight: 500; line-height: 19.6px; gap: 12px;">
+      <span>Publication</span>
+      <time style="color: rgba(255, 255, 255, 0.6); white-space: nowrap;">May 31, 2023</time>
+    </p>
+  </div>
+</a>
+
+<br>
+
+<!-- List item 2 -->
+<a style="display: block; width: 326px; height: 99px; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;" href="/index/language-models-can-explain-neurons-in-language-models/">
+  <div style="padding-top: 16px;">
+    <div style="font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">
+      <p style="width: 294px; font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">Language models can explain neurons in language models</p>
+    </div>
+    <p style="margin-top: 15px; display: flex; font-size: 14px; font-weight: 500; line-height: 19.6px; gap: 12px;">
+      <span>Publication</span>
+      <time style="color: rgba(255, 255, 255, 0.6); white-space: nowrap;">May 9, 2023</time>
+    </p>
+  </div>
+</a>
+
+<br>
+
+<!-- List item 3 (3-line title) -->
+<a style="display: block; width: 326px; height: 123px; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;" href="/index/economic-impacts-research/">
+  <div style="padding-top: 16px;">
+    <div style="font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">
+      <p style="width: 294px; font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">A research agenda for assessing the economic impacts of code generation models</p>
+    </div>
+    <p style="margin-top: 15px; display: flex; font-size: 14px; font-weight: 500; line-height: 19.6px; gap: 12px;">
+      <span>Publication</span>
+      <time style="color: rgba(255, 255, 255, 0.6); white-space: nowrap;">Mar 3, 2022</time>
+    </p>
+  </div>
+</a>
+
+<br>
+
+<!-- List item 4 -->
+<a style="display: block; width: 326px; height: 75px; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;" href="/index/solving-math-word-problems/">
+  <div style="padding-top: 16px;">
+    <div style="font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">
+      <p style="width: 294px; font-size: 18px; font-weight: 500; letter-spacing: -0.18px; line-height: 23.76px;">Solving math word problems</p>
+    </div>
+    <p style="margin-top: 15px; display: flex; font-size: 14px; font-weight: 500; line-height: 19.6px; gap: 12px;">
+      <span>Publication</span>
+      <time style="color: rgba(255, 255, 255, 0.6); white-space: nowrap;">Oct 29, 2021</time>
+    </p>
+  </div>
+</a>
+</div>
+
+
+<!-- ============================================================
+     6. FILTER / SORT BUTTONS
+     ============================================================ -->
+<div class="component-section">
+<span class="component-label">6. Filter / Sort Buttons</span>
+
+<!--
+  NOT PRESENT ON THIS PAGE.
+
+  This HTML is from the OpenAI Residency page (/research/residency/),
+  not the Research Index page (/research/index/).
+
+  The Residency page does not contain Filter or Sort UI elements.
+  Those would be found on the Research Index listing page.
+-->
+
+<p style="font-size: 14px; color: rgba(255,255,255,0.4); line-height: 22px;">
+  No Filter/Sort UI found on this page. This is the OpenAI Residency page,
+  not the Research Index. Filter and Sort controls would appear on /research/index/.
+</p>
+</div>
+
+
+<!-- ============================================================
+     BONUS: FAQ ACCORDION ITEMS
+     ============================================================ -->
+<div class="component-section">
+<span class="component-label">Bonus: FAQ Accordion</span>
+
+<!--
+  DESIGN TOKENS:
+  - Container: border-top: 1px solid rgba(255, 255, 255, 0.12)
+  - Each item: display: flex, full width
+  - Trigger button: full width (676px), height 60px, display flex, align-items center
+  - Question text: font-size 17px, letter-spacing -0.17px, line-height 27.999px (inside <h3>)
+  - Toggle icon: 16x16px SVG, positioned right side (left: 660px, top: 22px)
+    - OPEN state: minus icon (single horizontal line path)
+    - CLOSED state: plus icon (cross path)
+  - Answer area: display grid, overflow hidden (for animation)
+  - Answer text: font-size 14px, letter-spacing -0.14px, line-height 22.96px, color rgba(255,255,255,0.6)
+  - Divider between items: 1px, background-color white, opacity 0.12
+-->
+
+<!-- EXPANDED FAQ item -->
+<div style="position: relative; width: 676px; height: 131px; display: flex;">
+  <button style="position: absolute; left: 0px; top: 0px; width: 676px; height: 60px; align-items: center; display: flex; text-align: center;">
+    <h3 style="width: 644px; height: 60px; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;">
+      <span style="position: absolute; top: 20px;">Is the Residency an internship?</span>
+    </h3>
+    <div style="position: absolute; left: 660px; top: 22px; width: 16px; height: 16px; overflow: hidden;">
+      <!-- MINUS icon (expanded state) -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="16px" fill="none" viewBox="0 0 16 16" color="rgb(255, 255, 255)" display="block" height="16px">
+        <path fill="rgb(255, 255, 255)" d="M3 8c0-.46.373-.833.833-.833h8.334a.833.833 0 1 1 0 1.666H3.833A.833.833 0 0 1 3 8"></path>
+      </svg>
+    </div>
+  </button>
+  <div style="position: absolute; left: 0px; top: 60px; width: 676px; height: 70px; display: grid; overflow: hidden;">
+    <div style="width: 596px;">
+      <p style="font-size: 14px; letter-spacing: -0.14px; line-height: 22.96px; color: rgba(255, 255, 255, 0.6);">
+        <span>No. The Residency is not an internship. For those Residents who perform well we extend full-time offers to join OpenAI immediately upon completion of the six-months Residency.</span>
+      </p>
+    </div>
+  </div>
+  <!-- Divider -->
+  <div style="position: absolute; left: 0px; top: 130px; width: 676px; height: 1px;">
+    <div style="width: 676px; height: 1px; background-color: rgb(255, 255, 255); opacity: 0.12;"></div>
+  </div>
+</div>
+
+<br><br>
+
+<!-- COLLAPSED FAQ item -->
+<div style="position: relative; width: 676px; height: 61px; display: flex;">
+  <button style="position: absolute; left: 0px; top: 0px; width: 676px; height: 60px; align-items: center; display: flex; text-align: center;">
+    <h3 style="width: 644px; height: 60px; font-size: 17px; letter-spacing: -0.17px; line-height: 27.999px;">
+      <span style="position: absolute; top: 20px;">Can I pursue the Residency while enrolled in school or higher education studies?</span>
+    </h3>
+    <div style="position: absolute; left: 660px; top: 22px; width: 16px; height: 16px; overflow: hidden;">
+      <!-- PLUS icon (collapsed state) -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="16px" fill="none" viewBox="0 0 16 16" color="rgb(255, 255, 255)" display="block" height="16px">
+        <path fill="rgb(255, 255, 255)" d="M1.343 8a1 1 0 0 1 1-1H7V2.343a1 1 0 0 1 2 0V7h4.657a1 1 0 1 1 0 2H9v4.657a1 1 0 0 1-2 0V9H2.343a1 1 0 0 1-1-1"></path>
+      </svg>
+    </div>
+  </button>
+  <!-- Divider -->
+  <div style="position: absolute; left: 0px; top: 60px; width: 676px; height: 1px;">
+    <div style="width: 676px; height: 1px; background-color: rgb(255, 255, 255); opacity: 0.12;"></div>
+  </div>
+</div>
+</div>
+
+
+<!-- ============================================================
+     BONUS: FOOTER LINK COLUMNS
+     ============================================================ -->
+<div class="component-section">
+<span class="component-label">Bonus: Footer Link Column Pattern</span>
+
+<!--
+  DESIGN TOKENS:
+  - Footer: 1470px wide, 652px tall
+  - Inner padding: 15px sides, 48px top
+  - Content area: 1376px wide
+  - Column layout: display flex
+  - Column width: 256px
+  - Section header: 13px, weight 500, line-height 19.68px, color rgba(255,255,255,0.6)
+  - Link list: <ul> with <li>, list-style: none
+  - Link text: 13px, weight 500, line-height 19.68px, white
+  - Link vertical spacing: ~35.68px between items
+  - Copyright: "OpenAI (c) 2015-2026" at bottom
+-->
+
+<div style="width: 256px;">
+  <span style="font-size: 13px; font-weight: 500; line-height: 19.68px; color: rgba(255, 255, 255, 0.6); display: block; margin-bottom: 12px;">Research</span>
+  <ul style="list-style: none; font-size: 13px; font-weight: 500; line-height: 19.68px;">
+    <li style="margin-bottom: 16px;"><a href="/research/index/">Research Index</a></li>
+    <li style="margin-bottom: 16px;"><a href="/research/">Research Overview</a></li>
+    <li style="margin-bottom: 16px;"><a href="#">Economic Research</a></li>
+  </ul>
+</div>
+</div>
+
+
+<!-- ============================================================
+     DESIGN TOKEN SUMMARY
+     ============================================================ -->
+<!--
+  COLOR PALETTE:
+  - Background:     rgb(0, 0, 0)               -- pure black
+  - Text primary:   rgb(255, 255, 255)          -- pure white
+  - Text secondary: rgba(255, 255, 255, 0.6)    -- 60% white (dates, labels, answers)
+  - Button ghost:   rgba(255, 255, 255, 0.12)   -- 12% white (ghost button bg)
+  - Button primary: rgb(255, 255, 255)           -- white bg, black text
+  - Dark surface:   rgb(31, 31, 31)              -- footer button bg
+  - Divider:        rgba(255, 255, 255, 0.12)    -- 12% white (via opacity 0.12 on white)
+  - Card placeholder: rgba(255, 255, 255, 0.2)  -- 20% white (image placeholder)
+
+  BORDER RADIUS:
+  - Pill buttons:   40px
+  - Full circle:    9999px (search button, language selector)
+  - Cards/images:   6.08px
+
+  FONT FAMILY:
+  - Primary: "OpenAI Sans", sans-serif
+  - Fallback: Inter, Helvetica Neue
+
+  FONT SIZES:
+  - 64px  -- H1 hero
+  - 48px  -- H2 CTA
+  - 30px  -- H2 section, H3 FAQ title, blockquote
+  - 22px  -- H2 subsection
+  - 18px  -- Card title
+  - 17px  -- Body text, FAQ question
+  - 14px  -- Button text, meta, small body, answer text
+  - 13px  -- Nav links, footer links, section labels
+
+  FONT WEIGHT:
+  - 400   -- Body text (default)
+  - 500   -- Headings, buttons, nav links, labels, card titles
+  - 600   -- Bold emphasis (e.g., "Applications closed" notice)
+
+  SPACING:
+  - Page max-width: 1470px
+  - Content padding: 15px (sides) -> 32px inner -> 1376px content
+  - Button padding: 20px horizontal
+  - Card image to text gap: 16px (top padding on link area)
+  - FAQ divider: 1px, white at 12% opacity
+
+  SVG ICONS:
+  - Search (magnifying glass): 16x16, stroke, rgba(255,255,255,0.6)
+  - Chevron down: 12x12 (10x16 viewBox), fill, white
+  - Arrow (external link): 11x12, stroke, matches text color
+  - Accordion minus: 16x16, fill, white
+  - Accordion plus: 16x16, fill, white
+-->
+
+</body>
+</html>

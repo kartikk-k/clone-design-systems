@@ -5,35 +5,52 @@
 export const INJECT_SCRIPT = `
 (function () {
   const _prevFigma = window.figma;
-  window.figma = { __stubbed: true };
+  window.figma = { __stubbed: true, useHtmlClipboardEncoding: false };
 
   const _realRAF = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 
-  const _realClipboard = navigator.clipboard;
-  const _execCopy = (text) => {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    // Signal to Playwright that copy is done
+  // Stub focus/visibility checks — prevents the capture from blocking
+  // on focus or visibility which hangs in Playwright
+  document.hasFocus = () => true;
+  Object.defineProperty(document, 'hidden', { get: () => false });
+
+  const _onCapture = (text) => {
+    // Store data on window for Playwright to read
+    window.__DSC_DATA__ = text;
     window.__DSC_COPIED__ = true;
+    console.log('[DSC] Capture complete, data size:', text.length);
+    // Also try system clipboard (may fail silently)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    } catch(e) {}
   };
-  navigator.clipboard = {
-    writeText: (text) => { _execCopy(text); return Promise.resolve(); },
+  // Force-override navigator.clipboard using defineProperty
+  // (direct assignment fails in newer Chrome — clipboard is read-only)
+  const _fakeClipboard = {
+    writeText: (text) => { _onCapture(text); return Promise.resolve(); },
     write: async (items) => {
       for (const item of items) {
         const type = item.types.find(t => t === 'text/plain') || item.types[0];
         const blob = await item.getType(type);
         const text = await blob.text();
-        _execCopy(text);
+        _onCapture(text);
       }
     },
+    readText: () => Promise.resolve(''),
+    read: () => Promise.resolve([]),
   };
+  Object.defineProperty(navigator, 'clipboard', {
+    get: () => _fakeClipboard,
+    configurable: true,
+  });
 
   (() => {
       var Tn = Object.defineProperty,
@@ -133,7 +150,7 @@ export const INJECT_SCRIPT = `
       function jt(e) { if (e !== null) { let n = We.get(e); if (n) return n } let t = "h2d-node-" + ++Ot; return e !== null && We.set(e, t), t }
       function Dt(e) { return We.get(e) }
       function Nt(e) { return e.forEach(t => { t.decoding !== "sync" && (t.decoding = "sync"), t.loading !== "eager" && (t.loading = "eager") }), Promise.allSettled(e.map(t => t.decode())).then(t => Promise.resolve(t.map((n, r) => { var o; n.status === "rejected" && console.debug("Error decoding image", n.reason, (o = e[r]) == null ? void 0 : o.src) }))) }
-      var nr = { assertLayoutValid: !0, skipRemoteAssetSerialization: !1, includeReactFiberTree: !1, captureDeclaredStyles: !1, sourceDataExtractor: void 0 };
+      var nr = { assertLayoutValid: !0, skipRemoteAssetSerialization: !0, includeReactFiberTree: !1, captureDeclaredStyles: !1, sourceDataExtractor: void 0 };
       function Bt(e, t) { return C(this, null, function*() { let n = z(z({}, nr), t), r = { captureDeclaredStyles: n.captureDeclaredStyles === !0, declaredStylesCache: n.captureDeclaredStyles ? new Map : void 0, sourceDataExtractor: n.sourceDataExtractor }; $t(n), Ot = 0; let o = new ge(n), a = new me; if (e instanceof Element) { yield Nt(Array.from(e.querySelectorAll("img"))); let i = yield Rt(e, o, a, n, r), s = yield o.getBlobMap(), l = a.getFonts(), { width: c, height: u } = e.getBoundingClientRect(); if (!i || i.nodeType !== It.ELEMENT_NODE) throw new Error("Container node could not be serialized"); let d = n.includeReactFiberTree ? { reactFiberTree: je(e, Dt) } : void 0; return r.sourceDataExtractor && (yield r.sourceDataExtractor.assignCollectedElementSources(i)), { root: i, documentTitle: document.title || void 0, experimental: d, documentRect: { x: 0, y: 0, width: e.scrollWidth, height: e.scrollHeight }, viewportRect: { x: e.scrollLeft, y: e.scrollTop, width: c, height: u }, devicePixelRatio: window.devicePixelRatio, assets: s, fonts: l } } else if (e instanceof Document) { yield Nt(Array.from(e.images)); let i = yield Rt(e.documentElement, o, a, n, r), s = yield o.getBlobMap(), l = a.getFonts(); if (!i || i.nodeType !== It.ELEMENT_NODE) throw new Error("Container node must have a body element"); let c = n.includeReactFiberTree ? { reactFiberTree: je(e.documentElement, Dt) } : void 0; return r.sourceDataExtractor && (yield r.sourceDataExtractor.assignCollectedElementSources(i)), { documentTitle: e.title || void 0, root: i, experimental: c, documentRect: { x: 0, y: 0, width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight }, viewportRect: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }, devicePixelRatio: window.devicePixelRatio, assets: s, fonts: l } } throw new Error("Container node must be an Element or Document") }) }
       function Rt(e, t, n, r, o) { var i; $t(r); let a = (i = r.timeoutSignal) != null ? i : AbortSignal.timeout(tr); return new Promise((s, l) => { rr(() => s(_t(e, t, n, void 0, o)), a), a.addEventListener("abort", () => l(new $("H2D requestAnimationFrame timed out", "PAGE_NOT_RESPONDING")), { once: !0 }) }) }
       function rr(e, t) { if (t.aborted) return; let n = requestAnimationFrame(r => { t.aborted || e(r) }); t.addEventListener("abort", () => cancelAnimationFrame(n), { once: !0 }) }
