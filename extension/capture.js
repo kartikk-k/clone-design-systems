@@ -1,5 +1,4 @@
-// Auto-generated from inject-script.ts — do not edit
-// This is the Figma HTML-to-Design capture engine.
+// Figma capture engine — full version with toolbar
 
 (function () {
   const _prevFigma = window.figma;
@@ -11,7 +10,7 @@
   // Stub focus/visibility checks — prevents the capture from blocking
   // on focus or visibility which hangs in Playwright
   document.hasFocus = () => true;
-  Object.defineProperty(document, 'hidden', { get: () => false });
+  try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch(e) {}
 
   const _onCapture = (text) => {
     // Store data on window for Playwright to read

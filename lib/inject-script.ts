@@ -13,7 +13,7 @@ export const INJECT_SCRIPT = `
   // Stub focus/visibility checks — prevents the capture from blocking
   // on focus or visibility which hangs in Playwright
   document.hasFocus = () => true;
-  Object.defineProperty(document, 'hidden', { get: () => false });
+  try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch(e) {}
 
   const _onCapture = (text) => {
     // Store data on window for Playwright to read
