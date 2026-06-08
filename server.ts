@@ -43,6 +43,13 @@ if (existsSync(oldDataDir)) {
   } catch {}
 }
 
+// Ensure instructions.md is always present in the global data dir
+const instructionsSrc = join(import.meta.dir, "instructions.md");
+const instructionsDest = join(DATA_DIR, "instructions.md");
+if (existsSync(instructionsSrc) && !existsSync(instructionsDest)) {
+  await cp(instructionsSrc, instructionsDest);
+}
+
 console.log("");
 console.log("  \x1b[36m\x1b[1mDesign Grab\x1b[0m");
 console.log(`  \x1b[2mDashboard:  http://localhost:${port}\x1b[0m`);
@@ -68,7 +75,7 @@ Bun.serve({
 
     // ─── Dashboard static files ───────────────
 
-    if (path === "/" || path === "/index.html") {
+    if (path === "/" || path === "/index.html" || path.startsWith("/sites")) {
       return serveFile(join(import.meta.dir, "dashboard/index.html"), "text/html");
     }
 
@@ -118,6 +125,13 @@ Bun.serve({
     const genMatch = path.match(/^\/api\/sites\/([^/]+)\/generate-design-md$/);
     if (genMatch && req.method === "POST") {
       return handleGenerateDesignMd(genMatch[1]!, cors);
+    }
+
+    // ─── API: Agent prompt for design.md ───────
+
+    const agentPromptMatch = path.match(/^\/api\/sites\/([^/]+)\/agent-prompt$/);
+    if (agentPromptMatch && req.method === "GET") {
+      return handleAgentPrompt(agentPromptMatch[1]!, cors);
     }
 
     // ─── API: Preview rendered HTML ───────────
@@ -287,6 +301,42 @@ async function handleGenerateDesignMd(siteName: string, cors: Record<string, str
     return Response.json({
       success: true,
       sizeKB: (md.length / 1024).toFixed(1),
+    }, { headers: cors });
+  } catch (err: any) {
+    return Response.json({ error: err.message }, { status: 500, headers: cors });
+  }
+}
+
+async function handleAgentPrompt(siteName: string, cors: Record<string, string>) {
+  const siteDir = join(DATA_DIR, siteName);
+  try {
+    const files = await readdir(siteDir);
+    const renderedFiles = files.filter((f) => f.startsWith("rendered-") && f.endsWith(".html"));
+
+    if (renderedFiles.length === 0) {
+      return Response.json({ error: "No rendered HTML files found" }, { status: 400, headers: cors });
+    }
+
+    const instructionsPath = join(DATA_DIR, "instructions.md");
+    const renderedPaths = renderedFiles.map((f) => join(siteDir, f));
+    const outputPath = join(siteDir, "design.md");
+
+    const prompt = [
+      `Read the instructions file and ALL the rendered HTML files below, then generate design.md and save it to the output path.`,
+      ``,
+      `Instructions: ${instructionsPath}`,
+      ``,
+      `Rendered HTML files:`,
+      ...renderedPaths.map((p) => `  ${p}`),
+      ``,
+      `Output: ${outputPath}`,
+    ].join("\n");
+
+    return Response.json({
+      prompt,
+      instructionsPath,
+      renderedFiles: renderedPaths,
+      outputPath,
     }, { headers: cors });
   } catch (err: any) {
     return Response.json({ error: err.message }, { status: 500, headers: cors });
