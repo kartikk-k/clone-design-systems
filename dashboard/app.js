@@ -323,26 +323,38 @@ function renderSiteDetail() {
     ? `<span class="status-badge status-badge--ready"><span class="status-badge-dot"></span>design.md ready</span>`
     : `<span class="status-badge status-badge--empty"><span class="status-badge-dot"></span>No design.md</span>`;
 
+  const iconBtnStyle = `${BTN_ICON}`;
+
   hero.innerHTML = `
-    <div class="site-hero-avatar">${site.name.slice(0, 2).toUpperCase()}</div>
+    <div class="site-hero-top">
+      <div class="site-hero-avatar">${site.name.slice(0, 2).toUpperCase()}</div>
+      <div class="site-hero-icon-actions">
+        <button type="button" class="${iconBtnStyle}" title="Download design.md" onclick="downloadDesignMd('${site.name}')" ${site.hasDesignMd ? "" : 'style="display:none"'}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button type="button" class="${iconBtnStyle}" title="Delete site" onclick="confirmDeleteSite('${site.name}')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke="currentColor"><path d="M2.75 4.75H15.25"/><path d="M6.75 4.75V2.75C6.75 2.2 7.198 1.75 7.75 1.75H10.25C10.802 1.75 11.25 2.2 11.25 2.75V4.75"/><path d="M7.375 8.75L7.59219 13.25"/><path d="M10.625 8.75L10.4078 13.25"/><path d="M13.6977 7.75L13.35 14.35C13.294 15.4201 12.416 16.25 11.353 16.25H6.64804C5.58404 16.25 4.70703 15.42 4.65103 14.35L4.30334 7.75"/></g></svg>
+        </button>
+      </div>
+    </div>
     <h2 class="site-hero-name">${site.name}</h2>
     <div class="site-hero-meta">${pageCount} page${pageCount !== 1 ? "s" : ""} captured &nbsp;·&nbsp; ${statusHtml}</div>
     <div class="site-hero-actions" id="heroActions"></div>
   `;
   siteContent.appendChild(hero);
 
-  // Fill hero actions based on design.md availability
+  // Fill hero actions — only primary CTAs
   const heroActions = document.getElementById("heroActions");
+  const heroBtn = 'style="height:32px;font-size:12px;padding:0 16px;"';
   if (site.hasDesignMd) {
     heroActions.innerHTML = `
-      <button type="button" class="${BTN_PRIMARY}" onclick="copyDesignMd('${site.name}')">Copy design.md</button>
-      <button type="button" class="${BTN_SECONDARY}" onclick="downloadDesignMd('${site.name}')">Download</button>
-      <button type="button" class="${BTN_ACCENT}" onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+      <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyDesignMd('${site.name}')">Copy design.md</button>
+      <button type="button" class="${BTN_ACCENT}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
     `;
   } else {
     heroActions.innerHTML = `
-      <button type="button" class="${BTN_PRIMARY}" onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
-      <button type="button" class="${BTN_SECONDARY}" onclick="regenerateDesignMd('${site.name}')">Auto-generate</button>
+      <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+      <button type="button" class="${BTN_SECONDARY}" ${heroBtn} onclick="regenerateDesignMd('${site.name}')">Auto-generate</button>
     `;
   }
 
@@ -453,6 +465,19 @@ function openPagePreview(siteName, page, slug) {
   panel.appendChild(frame);
 
   siteContent.appendChild(panel);
+}
+
+async function confirmDeleteSite(siteName) {
+  if (!confirm(`Delete "${siteName}" and all its captures? This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`${API}/api/sites/${encodeURIComponent(siteName)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Delete failed");
+    showToast(`Deleted ${siteName}`, "success");
+    await loadSites();
+    showWelcome();
+  } catch (e) {
+    showToast("Failed to delete: " + e.message, "error");
+  }
 }
 
 async function confirmDeletePage(siteName, captureFile) {

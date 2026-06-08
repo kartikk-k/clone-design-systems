@@ -9,7 +9,7 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { mkdir, readdir, stat, unlink, cp } from "node:fs/promises";
+import { mkdir, readdir, stat, unlink, cp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { parseFigH2D, buildAssetMap } from "./scripts/lib/parser.ts";
 import { renderNode, type RenderContext } from "./scripts/lib/renderer.ts";
@@ -146,6 +146,13 @@ Bun.serve({
     const deleteMatch = path.match(/^\/api\/sites\/([^/]+)\/pages\/(.+)$/);
     if (deleteMatch && req.method === "DELETE") {
       return handleDeletePage(deleteMatch[1]!, deleteMatch[2]!, cors);
+    }
+
+    // ─── API: Delete entire site ─────────────
+
+    const deleteSiteMatch = path.match(/^\/api\/sites\/([^/]+)$/);
+    if (deleteSiteMatch && req.method === "DELETE") {
+      return handleDeleteSite(deleteSiteMatch[1]!, cors);
     }
 
     return Response.json({ error: "Not found" }, { status: 404, headers: cors });
@@ -375,6 +382,17 @@ async function handleDeletePage(siteName: string, captureFile: string, cors: Rec
     }
 
     console.log(`  \x1b[33m-\x1b[0m Deleted ${siteName}/${safe}`);
+    return Response.json({ success: true }, { headers: cors });
+  } catch (err: any) {
+    return Response.json({ error: err.message }, { status: 500, headers: cors });
+  }
+}
+
+async function handleDeleteSite(siteName: string, cors: Record<string, string>) {
+  const siteDir = join(DATA_DIR, siteName);
+  try {
+    await rm(siteDir, { recursive: true, force: true });
+    console.log(`  \x1b[33m-\x1b[0m Deleted site ${siteName}`);
     return Response.json({ success: true }, { headers: cors });
   } catch (err: any) {
     return Response.json({ error: err.message }, { status: 500, headers: cors });
