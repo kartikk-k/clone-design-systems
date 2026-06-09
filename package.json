@@ -1,35 +1,44 @@
 {
   "name": "designgrab",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Grab any website's design system. Capture, render, and extract design tokens into a portable design.md file.",
-  "module": "server.ts",
   "type": "module",
   "bin": {
-    "designgrab": "bin/designgrab.ts"
+    "designgrab": "dist/bin/designgrab.mjs"
   },
   "files": [
-    "bin/",
+    "dist/",
     "dashboard/",
     "extension/",
-    "lib/inject-script.ts",
-    "scripts/lib/",
-    "server.ts",
     "instructions.md"
   ],
+  "scripts": {
+    "build": "bun build server.ts --target=node --outfile=dist/server.mjs && bun build bin/designgrab.ts --target=node --outfile=dist/bin/designgrab.mjs",
+    "start": "node dist/server.mjs",
+    "dev": "bun --hot server.ts",
+    "prepublishOnly": "npm run build"
+  },
   "keywords": [
     "design-system",
     "design-tokens",
     "ui",
     "css",
     "capture",
-    "chrome-extension"
+    "chrome-extension",
+    "design-grab",
+    "figma",
+    "design"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kartikk-k/designgrab"
+  },
+  "homepage": "https://designgrab.vercel.app",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
     "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {}
+  }
 }
