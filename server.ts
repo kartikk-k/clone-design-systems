@@ -219,13 +219,29 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
       data: string;
       title?: string;
       timestamp?: number;
+      captureType?: string;
+      fonts?: { links?: string[]; fontFaces?: string[] };
     };
 
     if (!body.url || !body.data) {
       return sendJson(res, { error: "Missing url or data" }, 400);
     }
 
-    const result = await saveAndRender(body.url, body.data, body.title);
+    // New power capture: clean HTML with CSS inlined, scripts stripped
+    if (body.captureType === "power") {
+      const result = await savePowerCapture(body.url, body.data, body.title);
+      console.log(`  \x1b[32m+\x1b[0m ${result.siteName}/${result.filename} (${result.sizeKB}KB)`);
+      sendJson(res, {
+        success: true,
+        site: result.siteName,
+        filename: result.filename,
+        sizeKB: result.sizeKB,
+      });
+      return;
+    }
+
+    // Legacy figh2d capture (kept for backward compat)
+    const result = await saveAndRender(body.url, body.data, body.title, body.fonts);
     console.log(`  \x1b[32m+\x1b[0m ${result.siteName}/${result.rawFilename} (${result.rawKB}KB -> ${result.renderedKB}KB)`);
 
     sendJson(res, {
@@ -347,28 +363,62 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
   try {
     const files = await readdir(siteDir);
-    const renderedFiles = files.filter((f) => f.startsWith("rendered-") && f.endsWith(".html"));
+    const captureFiles = files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
 
-    if (renderedFiles.length === 0) {
-      return sendJson(res, { error: "No rendered HTML files found" }, 400);
+    if (captureFiles.length === 0) {
+      return sendJson(res, { error: "No capture files found" }, 400);
     }
 
-    const instructionsPath = join(DATA_DIR, "instructions.md");
-    const renderedPaths = renderedFiles.map((f) => join(siteDir, f));
-    const outputPath = join(siteDir, "design.md");
+    const capturePaths = captureFiles.map((f) => join(siteDir, f));
+    const componentsPath = join(siteDir, "components-tailwind.html");
+    const designMdPath = join(siteDir, "design.md");
+    const promptFilePath = join(PKG_ROOT, "scripts", "prompts", "generate-components.md");
+
+    // Read the component generation prompt
+    let componentPrompt = "";
+    try {
+      componentPrompt = await readFile(promptFilePath, "utf-8");
+    } catch {
+      componentPrompt = "See the generate-components.md prompt file for full instructions.";
+    }
 
     const prompt = [
-      `Read the instructions file and ALL the rendered HTML files below, then generate design.md and save it to the output path.`,
+      `You have captured HTML files for the "${siteName}" website. Complete these two steps:`,
       ``,
-      `Instructions: ${instructionsPath}`,
+      `## Step 1: Generate components-tailwind.html`,
       ``,
-      `Rendered HTML files:`,
-      ...renderedPaths.map((p) => `  ${p}`),
+      `Read ALL the captured HTML files below. These are self-contained HTML files with all CSS inlined and scripts stripped.`,
+      `Extract EVERY unique UI component from the pages and recreate each one using clean Tailwind CSS.`,
       ``,
-      `Output: ${outputPath}`,
+      `CRITICAL: Do NOT fabricate any content. Only use text, icons, labels, and content that EXIST in the source HTML files.`,
+      ``,
+      `${componentPrompt}`,
+      ``,
+      `Captured HTML files (read ALL of these):`,
+      ...capturePaths.map((p) => `  ${p}`),
+      ``,
+      `Save the components file to: ${componentsPath}`,
+      ``,
+      `## Step 2: Generate design.md`,
+      ``,
+      `After creating components-tailwind.html, read it and generate a comprehensive design.md file.`,
+      `The design.md should document the complete design system including:`,
+      `- Color palette with exact values`,
+      `- Typography scale`,
+      `- Spacing system`,
+      `- Border radius values`,
+      `- Component patterns with Tailwind code examples`,
+      `- Layout patterns`,
+      ``,
+      `Save the design.md to: ${designMdPath}`,
     ].join("\n");
 
-    sendJson(res, { prompt, instructionsPath, renderedFiles: renderedPaths, outputPath });
+    sendJson(res, {
+      prompt,
+      capturePaths,
+      componentsPath,
+      designMdPath,
+    });
   } catch (err: any) {
     sendJson(res, { error: err.message }, 500);
   }
@@ -415,9 +465,34 @@ async function handleDeleteSite(siteName: string, res: ServerResponse) {
   }
 }
 
-// ─── Save and render ──────────────────────────────
+// ─── Save power capture (new) ─────────────────────
 
-async function saveAndRender(pageUrl: string, data: string, title?: string) {
+async function savePowerCapture(pageUrl: string, htmlData: string, title?: string) {
+  const parsed = new URL(pageUrl);
+  const siteName = parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
+
+  const siteDir = join(DATA_DIR, siteName);
+  await mkdir(siteDir, { recursive: true });
+
+  // Save the clean HTML — this IS the capture AND the rendered preview
+  const filename = `capture-${pathSlug}.html`;
+  await writeFile(join(siteDir, filename), htmlData, "utf-8");
+
+  // Also save as rendered file (same content — the HTML is already renderable)
+  const renderedFilename = `rendered-${pathSlug}.html`;
+  await writeFile(join(siteDir, renderedFilename), htmlData, "utf-8");
+
+  return {
+    siteName,
+    filename,
+    sizeKB: (htmlData.length / 1024).toFixed(0),
+  };
+}
+
+// ─── Save and render (legacy figh2d) ──────────────
+
+async function saveAndRender(pageUrl: string, data: string, title?: string, fonts?: { links?: string[]; fontFaces?: string[] }) {
   const parsed = new URL(pageUrl);
   const siteName = parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-");
   const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
@@ -459,6 +534,8 @@ async function saveAndRender(pageUrl: string, data: string, title?: string) {
       pageWidth: figh2d.documentRect.width,
       pageHeight: figh2d.documentRect.height,
       contentHtml,
+      fontLinks: fonts?.links,
+      fontFaces: fonts?.fontFaces,
     });
   } catch {
     renderedOutput = `<!-- Render failed for ${pageUrl} -->`;

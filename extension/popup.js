@@ -37,7 +37,7 @@ async function checkServer() {
     log("Server check failed:", e.message);
   }
   statusDot.classList.remove("connected");
-  statusText.textContent = "Server offline — run: bun server.ts";
+  statusText.textContent = "Server offline — run: npx designgrab";
   capturePageBtn.disabled = true;
   return false;
 }
@@ -51,7 +51,7 @@ capturePageBtn.addEventListener("click", async () => {
   if (!connected) return;
 
   capturePageBtn.disabled = true;
-  statusText.textContent = "Capturing...";
+  statusText.textContent = "Capturing page...";
   resultDiv.className = "result";
   resultDiv.style.display = "none";
 
@@ -60,153 +60,123 @@ capturePageBtn.addEventListener("click", async () => {
     if (!tab?.id) throw new Error("No active tab");
     log("Tab:", tab.id, tab.url);
 
-    // Get the capture script
-    const scriptUrl = chrome.runtime.getURL("capture.js");
-    log("Fetching capture script from", scriptUrl);
-    const scriptRes = await fetch(scriptUrl);
-    const scriptCode = await scriptRes.text();
-    log("Capture script loaded:", scriptCode.length, "chars");
-
-    // Step 1: Clean up any previous injection completely
-    log("Step 1: Cleaning up previous injection...");
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        console.log("[DG] Cleaning up previous injection...");
-        // Reset all flags
-        window.__DG_DATA__ = null;
-        window.__DG_COPIED__ = false;
-        window.__DG_INJECTED__ = false;
-        // Remove Figma toolbar
-        const bar = document.getElementById("__figma_capture_toolbar_host__");
-        if (bar) {
-          bar.remove();
-          console.log("[DG] Removed existing Figma toolbar");
-        } else {
-          console.log("[DG] No existing toolbar found");
-        }
-        // Reset figma object
-        window.figma = undefined;
-        console.log("[DG] Cleanup complete");
-      },
-      world: "MAIN",
-    });
-    log("Cleanup done");
-
-    // Step 2: Inject capture script fresh
-    log("Step 2: Injecting capture script...");
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (code) => {
-        console.log("[DG] Injecting capture script (" + code.length + " chars)...");
-        try {
-          const fn = new Function(code);
-          fn();
-          console.log("[DG] Script injected successfully");
-          console.log("[DG] figma object:", typeof window.figma);
-          console.log("[DG] captureForDesign:", typeof window.figma?.captureForDesign);
-        } catch (e) {
-          console.error("[DG] Script injection error:", e.message);
-        }
-      },
-      args: [scriptCode],
-      world: "MAIN",
-    });
-    log("Script injected");
-
-    // Step 3: Poll for __DG_DATA__
-    log("Step 3: Polling for captured data...");
     const serverUrl = serverUrlInput.value;
-    const tabId = tab.id;
     const tabUrl = tab.url;
     const tabTitle = tab.title;
 
-    let attempts = 0;
-    const poll = setInterval(async () => {
-      attempts++;
+    // Run the capture script directly in the page
+    // This inlines all CSS, strips scripts, and returns the clean HTML
+    statusText.textContent = "Inlining stylesheets...";
 
-      try {
-        const results = await chrome.scripting.executeScript({
-          target: { tabId },
-          func: () => {
-            const data = window.__DG_DATA__;
-            const copied = window.__DG_COPIED__;
-            if (data) {
-              console.log("[DG] Data found! Size:", data.length, "chars");
-              const captured = data;
-              // Reset everything for next capture
-              window.__DG_DATA__ = null;
-              window.__DG_COPIED__ = false;
-              window.__DG_INJECTED__ = false;
-              window.figma = undefined;
-              // Remove toolbar
-              const bar = document.getElementById("__figma_capture_toolbar_host__");
-              if (bar) {
-                bar.remove();
-                console.log("[DG] Toolbar removed after capture");
-              }
-              return captured;
-            }
-            // Log progress every 10 attempts
-            if (window.__DG_POLL_COUNT__ === undefined) window.__DG_POLL_COUNT__ = 0;
-            window.__DG_POLL_COUNT__++;
-            if (window.__DG_POLL_COUNT__ % 50 === 0) {
-              console.log("[DG] Still waiting... attempt", window.__DG_POLL_COUNT__, "| __DG_DATA__:", !!data, "| __DG_COPIED__:", copied);
-            }
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async () => {
+        const baseURI = document.baseURI;
+
+        // --- helpers ---
+        async function fetchText(url) {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return await res.text();
+          } catch (e) {
+            console.warn('[DG] Skipped (CORS):', url, e.message);
             return null;
-          },
-          world: "MAIN",
-        });
+          }
+        }
 
-        const data = results[0]?.result;
-        if (data) {
-          clearInterval(poll);
-          log("Data received!", data.length, "chars");
-          statusText.textContent = "Sending to server...";
-
-          log("Sending to", serverUrl + "/capture");
-          const res = await fetch(`${serverUrl}/capture`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: tabUrl,
-              data: data,
-              title: tabTitle,
-              timestamp: Date.now(),
-            }),
+        function absolutizeCssUrls(css, cssHref) {
+          return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (m, q, ref) => {
+            if (/^(data:|https?:|#)/i.test(ref)) return m;
+            try { return 'url("' + new URL(ref, cssHref).href + '")'; }
+            catch { return m; }
           });
-
-          const result = await res.json();
-          log("Server response:", result);
-          if (result.error) throw new Error(result.error);
-
-          statusText.textContent = "Captured!";
-          resultDiv.className = "result show success";
-          resultDiv.innerHTML = `
-            <strong>${result.site}</strong><br>
-            Raw: ${result.raw} (${result.rawSize}KB)<br>
-            Rendered: ${result.rendered} (${result.renderedSize}KB)
-          `;
-          capturePageBtn.disabled = false;
-          capturePageBtn.textContent = "Capture Again";
-          return;
         }
-      } catch (e) {
-        log("Poll error:", e.message);
-        if (attempts > 600) {
-          clearInterval(poll);
-          statusText.textContent = "Timeout";
-          capturePageBtn.disabled = false;
-        }
-      }
 
-      if (attempts > 600) {
-        clearInterval(poll);
-        log("Polling timed out after 60 seconds");
-        statusText.textContent = "Timeout — try again";
-        capturePageBtn.disabled = false;
-      }
-    }, 100);
+        // --- Clone the DOM ---
+        console.log('[DG] Cloning DOM...');
+        const doc = document.documentElement.cloneNode(true);
+
+        // Remove <base> tags
+        doc.querySelectorAll('base').forEach(b => b.remove());
+
+        // 1. Inline external stylesheets
+        console.log('[DG] Inlining stylesheets...');
+        for (const link of [...doc.querySelectorAll('link[rel~="stylesheet"][href]')]) {
+          const href = new URL(link.getAttribute('href'), baseURI).href;
+          const css = await fetchText(href);
+          if (css !== null) {
+            const style = document.createElement('style');
+            style.textContent = absolutizeCssUrls(css, href);
+            link.replaceWith(style);
+          }
+        }
+
+        // 2. STRIP all scripts (we don't need them for design extraction)
+        console.log('[DG] Stripping scripts...');
+        doc.querySelectorAll('script').forEach(s => s.remove());
+
+        // 3. Strip noscript, iframes, browser extension artifacts
+        doc.querySelectorAll('noscript, iframe, plasmo-csui').forEach(el => el.remove());
+
+        // 4. Make links/image srcs absolute
+        for (const el of [...doc.querySelectorAll('a[href]')]) {
+          const href = el.getAttribute('href');
+          if (href && !/^(data:|https?:|mailto:|tel:|#|javascript:)/i.test(href)) {
+            try { el.setAttribute('href', new URL(href, baseURI).href); } catch {}
+          }
+        }
+        for (const img of [...doc.querySelectorAll('img[src]')]) {
+          const src = img.getAttribute('src');
+          if (src && !src.startsWith('data:') && !src.startsWith('http')) {
+            try { img.setAttribute('src', new URL(src, baseURI).href); } catch {}
+          }
+        }
+        // Strip srcset (broken relative refs)
+        doc.querySelectorAll('img[srcset], source[srcset]').forEach(el => el.removeAttribute('srcset'));
+
+        // 5. Remove meta tags that aren't needed
+        doc.querySelectorAll('meta[http-equiv], meta[name="robots"], meta[name="googlebot"]').forEach(m => m.remove());
+
+        // Assemble
+        const html = '<!DOCTYPE html>\n' + doc.outerHTML;
+        console.log('[DG] Capture complete:', (html.length / 1024).toFixed(0) + 'KB');
+        return html;
+      },
+      world: "MAIN",
+    });
+
+    const capturedHtml = results[0]?.result;
+    if (!capturedHtml) throw new Error("Capture returned empty");
+
+    log("Captured HTML:", (capturedHtml.length / 1024).toFixed(0) + "KB");
+    statusText.textContent = "Sending to server...";
+
+    // Send to server
+    const res = await fetch(`${serverUrl}/capture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: tabUrl,
+        data: capturedHtml,
+        title: tabTitle,
+        timestamp: Date.now(),
+        captureType: "power", // New capture type
+      }),
+    });
+
+    const result = await res.json();
+    log("Server response:", result);
+    if (result.error) throw new Error(result.error);
+
+    statusText.textContent = "Captured!";
+    resultDiv.className = "result show success";
+    resultDiv.innerHTML = `
+      <strong>${result.site}</strong><br>
+      Saved: ${result.filename} (${result.sizeKB}KB)
+    `;
+    capturePageBtn.disabled = false;
+    capturePageBtn.textContent = "Capture Again";
   } catch (err) {
     log("Capture error:", err.message, err.stack);
     statusText.textContent = "Error";
@@ -216,5 +186,5 @@ capturePageBtn.addEventListener("click", async () => {
   }
 });
 
-// Hide section button — Figma toolbar handles it
+// Hide section button — not needed for power capture
 captureSectionBtn.style.display = "none";

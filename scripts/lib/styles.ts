@@ -22,6 +22,8 @@ export const VISUAL_PROPS = new Set([
   "whiteSpace", "wordBreak", "listStyleType",
   // Content alignment within positioned boxes
   "display", "alignItems", "justifyContent",
+  // Stacking
+  "zIndex",
 ]);
 
 /** Build CSS props array from a node's computed styles */
@@ -68,11 +70,11 @@ export function applyGradientText(
   cssProps.push(`-webkit-background-clip: text`);
   cssProps.push(`-webkit-text-fill-color: transparent`);
 
-  // Inline elements need inline-block for width/height to work
+  // Inline elements need inline-block for width/height to work with background-clip
   if (styles.display === "inline") {
-    const displayIdx = cssProps.findIndex((p) => p.startsWith("display: inline"));
-    if (displayIdx >= 0) cssProps[displayIdx] = "display: inline-block";
-    else cssProps.push("display: inline-block");
+    const displayIdx = cssProps.findIndex((p) => p.startsWith("display:"));
+    if (displayIdx >= 0) cssProps[displayIdx] = "display: inline";
+    else cssProps.push("display: inline");
   }
 }
 
