@@ -356,7 +356,6 @@ function renderSiteDetail() {
   } else {
     heroActions.innerHTML = `
       <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
-      <button type="button" class="${BTN_SECONDARY}" ${heroBtn} onclick="regenerateDesignMd('${site.name}')">Auto-generate</button>
     `;
   }
 
@@ -526,10 +525,7 @@ async function renderDesignMdTab(site) {
     header.className = "md-section-header";
     header.innerHTML = `
       <span class="md-section-label">design.md</span>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button type="button" class="${BTN_ACCENT}" style="height:32px;font-size:12px;padding:0 14px;" onclick="regenerateDesignMd('${site.name}')">Regenerate</button>
-        <span class="md-section-meta">${(md.length / 1024).toFixed(1)} KB</span>
-      </div>
+      <span class="md-section-meta">${(md.length / 1024).toFixed(1)} KB</span>
     `;
     container.insertBefore(header, content);
 
@@ -549,7 +545,6 @@ async function renderDesignMdTab(site) {
       <div class="empty-state-desc">Generate a complete design system specification from your captured pages. Copy the agent prompt and paste it into Claude or any AI agent.</div>
       <div class="empty-state-actions">
         <button type="button" class="${BTN_PRIMARY}" onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
-        <button type="button" class="${BTN_SECONDARY}" onclick="regenerateDesignMd('${site.name}')">Auto-generate</button>
       </div>
     `;
     content.appendChild(empty);
