@@ -158,6 +158,20 @@ const server = createServer(async (req, res) => {
       return await handleDeleteSite(siteMatch[1]!, res);
     }
 
+    // ─── API: components-tailwind.html ────────
+
+    const componentsMatch = path.match(/^\/api\/sites\/([^/]+)\/components$/);
+    if (componentsMatch && method === "GET") {
+      const filePath = join(DATA_DIR, componentsMatch[1]!, "components-tailwind.html");
+      if (existsSync(filePath)) {
+        const content = await readFile(filePath, "utf-8");
+        sendText(res, content, "text/html; charset=utf-8");
+      } else {
+        send404(res);
+      }
+      return;
+    }
+
     // ─── API: design.md ──────────────────────
 
     const designMdMatch = path.match(/^\/api\/sites\/([^/]+)\/design\.md$/);
@@ -270,14 +284,12 @@ async function handleListSites(res: ServerResponse) {
       const files = await readdir(siteDir);
 
       const captures = files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
-      const rendered = files.filter((f) => f.startsWith("rendered-") && f.endsWith(".html"));
       const hasDesignMd = files.includes("design.md");
+      const hasComponents = files.includes("components-tailwind.html");
 
       const pages = [];
       for (const cap of captures) {
         const slug = cap.replace("capture-", "").replace(".html", "");
-        const renderedFile = `rendered-${slug}.html`;
-        const hasRendered = rendered.includes(renderedFile);
 
         let captureKB = "?";
         try {
@@ -287,7 +299,6 @@ async function handleListSites(res: ServerResponse) {
 
         pages.push({
           capture: cap,
-          rendered: hasRendered ? renderedFile : null,
           slug,
           captureKB,
         });
@@ -297,6 +308,7 @@ async function handleListSites(res: ServerResponse) {
         name: siteName,
         pages,
         hasDesignMd,
+        hasComponents,
         pageCount: pages.length,
       });
     }
@@ -387,7 +399,7 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
       ``,
       `## Step 1: Generate components-tailwind.html`,
       ``,
-      `Read ALL the captured HTML files below. These are self-contained HTML files with all CSS inlined and scripts stripped.`,
+      `Read ALL the captured HTML files below. These are self-contained HTML files with all CSS inlined and scripts stripped. No rendering step is needed — these files ARE the renderable pages.`,
       `Extract EVERY unique UI component from the pages and recreate each one using clean Tailwind CSS.`,
       ``,
       `CRITICAL: Do NOT fabricate any content. Only use text, icons, labels, and content that EXIST in the source HTML files.`,
@@ -426,7 +438,15 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
 
 async function handlePreview(siteName: string, filename: string, res: ServerResponse) {
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "");
-  const filePath = join(DATA_DIR, siteName, safe);
+
+  // Try the exact filename first, then fall back to capture- prefix
+  let filePath = join(DATA_DIR, siteName, safe);
+  if (!existsSync(filePath)) {
+    // If requesting rendered-*, try the capture- version instead (no more separate rendered files)
+    const captureName = safe.replace(/^rendered-/, "capture-");
+    filePath = join(DATA_DIR, siteName, captureName);
+  }
+
   if (!existsSync(filePath)) {
     return send404(res);
   }
@@ -475,13 +495,9 @@ async function savePowerCapture(pageUrl: string, htmlData: string, title?: strin
   const siteDir = join(DATA_DIR, siteName);
   await mkdir(siteDir, { recursive: true });
 
-  // Save the clean HTML — this IS the capture AND the rendered preview
+  // Save the clean HTML — this IS the capture AND the preview (no rendering needed)
   const filename = `capture-${pathSlug}.html`;
   await writeFile(join(siteDir, filename), htmlData, "utf-8");
-
-  // Also save as rendered file (same content — the HTML is already renderable)
-  const renderedFilename = `rendered-${pathSlug}.html`;
-  await writeFile(join(siteDir, renderedFilename), htmlData, "utf-8");
 
   return {
     siteName,

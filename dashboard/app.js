@@ -15,8 +15,10 @@ function tabClass(active) {
 }
 
 function setTabActiveState(tabsEl, tab) {
+  const tabLabels = { "design-md": "DESIGN.MD", "components": "COMPONENTS", "pages": "PAGES" };
+  const activeLabel = tabLabels[tab] || tab.toUpperCase();
   tabsEl.querySelectorAll(".tab").forEach((t) => {
-    const active = t.textContent.trim() === (tab === "pages" ? "Pages" : "design.md");
+    const active = t.textContent.trim() === activeLabel;
     t.classList.toggle("tab-retool-active", active);
     t.classList.toggle("tab-retool-inactive", !active);
   });
@@ -68,12 +70,12 @@ function navigate(path, replace = false) {
 function handleRoute() {
   const path = window.location.pathname;
 
-  // /sites/:name or /sites/:name/pages
-  const siteMatch = path.match(/^\/sites\/([^/]+)(\/pages)?$/);
+  // /sites/:name or /sites/:name/pages or /sites/:name/components
+  const siteMatch = path.match(/^\/sites\/([^/]+)(\/pages|\/components)?$/);
 
   if (siteMatch) {
     const siteName = decodeURIComponent(siteMatch[1]);
-    const tab = siteMatch[2] ? "pages" : "design-md";
+    const tab = siteMatch[2] === "/pages" ? "pages" : siteMatch[2] === "/components" ? "components" : "design-md";
     const site = sites.find((s) => s.name === siteName);
     if (site) {
       currentSite = site;
@@ -363,12 +365,15 @@ function renderSiteDetail() {
   tabs.className = "tabs tabs-bar-retool";
   tabs.innerHTML = `
     <button type="button" class="${tabClass(currentTab === "design-md")}" onclick="switchTab('design-md')">design.md</button>
+    <button type="button" class="${tabClass(currentTab === "components")}" onclick="switchTab('components')">Components</button>
     <button type="button" class="${tabClass(currentTab === "pages")}" onclick="switchTab('pages')">Pages</button>
   `;
   siteContent.appendChild(tabs);
 
   if (currentTab === "pages") {
     renderPagesTab(site);
+  } else if (currentTab === "components") {
+    renderComponentsTab(site);
   } else {
     renderDesignMdTab(site);
   }
@@ -377,11 +382,12 @@ function renderSiteDetail() {
 function switchTab(tab) {
   // Update URL without full re-render
   const siteName = encodeURIComponent(currentSite.name);
-  const path = tab === "pages" ? `/sites/${siteName}/pages` : `/sites/${siteName}`;
-  history.pushState(null, "", path);
+  const pathSuffix = tab === "pages" ? "/pages" : tab === "components" ? "/components" : "";
+  history.pushState(null, "", `/sites/${siteName}${pathSuffix}`);
 
   currentTab = tab;
-  topbarPage.textContent = tab === "pages" ? "Pages" : "design.md";
+  const tabLabels = { "design-md": "design.md", "components": "Components", "pages": "Pages" };
+  topbarPage.textContent = tabLabels[tab] || tab;
   // Re-render content below tabs
   const tabs = siteContent.querySelector(".tabs");
   // Remove everything after tabs
@@ -391,6 +397,8 @@ function switchTab(tab) {
 
   if (tab === "pages") {
     renderPagesTab(currentSite);
+  } else if (tab === "components") {
+    renderComponentsTab(currentSite);
   } else {
     renderDesignMdTab(currentSite);
   }
@@ -406,12 +414,12 @@ function renderPagesTab(site) {
     const card = document.createElement("div");
     card.className = "page-card-retool group";
 
-    const previewUrl = `${API}/api/sites/${site.name}/preview/${page.rendered}`;
-    const slug = page.rendered.replace("rendered-", "").replace(".html", "");
+    const previewUrl = `${API}/api/sites/${site.name}/preview/${page.capture}`;
+    const slug = page.slug;
 
     card.innerHTML = `
       <div class="page-card-preview page-card-preview-wrap">
-        <iframe src="${previewUrl}" loading="lazy" sandbox="allow-same-origin" title="Preview ${slug}"></iframe>
+        <iframe src="${previewUrl}" loading="lazy" sandbox="allow-same-origin allow-scripts" title="Preview ${slug}"></iframe>
       </div>
       <div class="page-card-footer">
         <span class="page-card-slug">${slug}</span>
@@ -450,7 +458,7 @@ function openPagePreview(siteName, page, slug) {
       Back
     </button>
     <span class="toolbar-spacer"></span>
-    <button type="button" class="${BTN_SECONDARY}" onclick="window.open('${API}/api/sites/${siteName}/preview/${page.rendered}', '_blank')">
+    <button type="button" class="${BTN_SECONDARY}" onclick="window.open('${API}/api/sites/${siteName}/preview/${page.capture}', '_blank')">
       Open in new tab
     </button>
     <button type="button" class="${BTN_DANGER}" onclick="confirmDeletePage('${siteName}', '${page.capture}')">
@@ -461,7 +469,7 @@ function openPagePreview(siteName, page, slug) {
 
   const frame = document.createElement("div");
   frame.className = "preview-frame-retool page-preview-frame";
-  frame.innerHTML = `<iframe src="${API}/api/sites/${siteName}/preview/${page.rendered}" title="Full preview ${slug}"></iframe>`;
+  frame.innerHTML = `<iframe src="${API}/api/sites/${siteName}/preview/${page.capture}" title="Full preview ${slug}"></iframe>`;
   panel.appendChild(frame);
 
   siteContent.appendChild(panel);
@@ -545,6 +553,59 @@ async function renderDesignMdTab(site) {
       </div>
     `;
     content.appendChild(empty);
+  }
+}
+
+// ─── Components tab ──────────────────────────────
+
+async function renderComponentsTab(site) {
+  const container = document.createElement("div");
+  container.className = "panel-block";
+
+  const content = document.createElement("div");
+  content.innerHTML = `<span class="md-section-meta">Loading...</span>`;
+  container.appendChild(content);
+  siteContent.appendChild(container);
+
+  // Try to load components-tailwind.html
+  try {
+    const res = await fetch(`${API}/api/sites/${site.name}/components`);
+    if (res.ok) {
+      const html = await res.text();
+
+      // Section header
+      const header = document.createElement("div");
+      header.className = "md-section-header";
+      header.innerHTML = `
+        <span class="md-section-label">Components</span>
+        <span class="md-section-meta">${(html.length / 1024).toFixed(1)} KB</span>
+      `;
+      container.insertBefore(header, content);
+
+      // Render in iframe for proper isolation (Tailwind needs its own context)
+      content.className = "preview-frame-retool";
+      content.style.height = "calc(100vh - 12rem)";
+      content.innerHTML = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width:100%;height:100%;border:0;border-radius:6px;"></iframe>`;
+    } else {
+      content.className = "panel-block";
+      content.innerHTML = "";
+
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.innerHTML = `
+        <div class="empty-state-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </div>
+        <div class="empty-state-title">No components yet</div>
+        <div class="empty-state-desc">Generate components from captured pages using the agent prompt. The agent will create a Tailwind component library from your captures.</div>
+        <div class="empty-state-actions">
+          <button type="button" class="${BTN_PRIMARY}" onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+        </div>
+      `;
+      content.appendChild(empty);
+    }
+  } catch (e) {
+    content.innerHTML = `<span class="md-section-meta">Error: ${e.message}</span>`;
   }
 }
 
