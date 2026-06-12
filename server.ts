@@ -14,10 +14,7 @@ import { homedir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { mkdir, readdir, stat, unlink, cp, rm, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { parseFigH2D, buildAssetMap } from "./scripts/lib/parser.ts";
-import { renderNode, type RenderContext } from "./scripts/lib/renderer.ts";
-import { buildPage } from "./scripts/lib/template.ts";
-import { generateDesignMd } from "./scripts/lib/design-extractor.ts";
+// Legacy imports removed — no longer using Figma figh2d capture/render pipeline
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Package root: when running from dist/server.mjs, go up one level
@@ -130,6 +127,10 @@ const server = createServer(async (req, res) => {
       return await sendFile(res, join(PKG_ROOT, "dashboard/app.js"), "application/javascript; charset=utf-8");
     }
 
+    if (path === "/logo.png") {
+      return await sendFile(res, join(PKG_ROOT, "dashboard/logo.png"), "image/png");
+    }
+
     // ─── Health ───────────────────────────────
 
     if (path === "/health") {
@@ -158,11 +159,11 @@ const server = createServer(async (req, res) => {
       return await handleDeleteSite(siteMatch[1]!, res);
     }
 
-    // ─── API: components-tailwind.html ────────
+    // ─── API: components.html ────────
 
     const componentsMatch = path.match(/^\/api\/sites\/([^/]+)\/components$/);
     if (componentsMatch && method === "GET") {
-      const filePath = join(DATA_DIR, componentsMatch[1]!, "components-tailwind.html");
+      const filePath = join(DATA_DIR, componentsMatch[1]!, "components.html");
       if (existsSync(filePath)) {
         const content = await readFile(filePath, "utf-8");
         sendText(res, content, "text/html; charset=utf-8");
@@ -172,19 +173,24 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // ─── API: design.md ──────────────────────
+    // ─── API: instructions.md ────────────────
 
-    const designMdMatch = path.match(/^\/api\/sites\/([^/]+)\/design\.md$/);
-    if (designMdMatch && method === "GET") {
-      return await handleGetDesignMd(designMdMatch[1]!, res);
+    const instructionsMatch = path.match(/^\/api\/sites\/([^/]+)\/instructions$/);
+    if (instructionsMatch && method === "GET") {
+      // Try site-specific instructions first, then global
+      const siteInstr = join(DATA_DIR, instructionsMatch[1]!, "instructions.md");
+      const globalInstr = join(PKG_ROOT, "scripts", "prompts", "agent-instructions.md");
+      const filePath = existsSync(siteInstr) ? siteInstr : globalInstr;
+      if (existsSync(filePath)) {
+        const content = await readFile(filePath, "utf-8");
+        sendText(res, content, "text/plain; charset=utf-8");
+      } else {
+        send404(res);
+      }
+      return;
     }
 
-    // ─── API: Generate design.md ──────────────
-
-    const genMatch = path.match(/^\/api\/sites\/([^/]+)\/generate-design-md$/);
-    if (genMatch && method === "POST") {
-      return await handleGenerateDesignMd(genMatch[1]!, res);
-    }
+    // (design.md routes removed — replaced by components.html + instructions.md)
 
     // ─── API: Agent prompt for design.md ───────
 
@@ -234,7 +240,6 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
       title?: string;
       timestamp?: number;
       captureType?: string;
-      fonts?: { links?: string[]; fontFaces?: string[] };
     };
 
     if (!body.url || !body.data) {
@@ -254,18 +259,8 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
-    // Legacy figh2d capture (kept for backward compat)
-    const result = await saveAndRender(body.url, body.data, body.title, body.fonts);
-    console.log(`  \x1b[32m+\x1b[0m ${result.siteName}/${result.rawFilename} (${result.rawKB}KB -> ${result.renderedKB}KB)`);
-
-    sendJson(res, {
-      success: true,
-      site: result.siteName,
-      raw: result.rawFilename,
-      rendered: result.renderedFilename,
-      rawSize: result.rawKB,
-      renderedSize: result.renderedKB,
-    });
+    // Unknown capture type
+    sendJson(res, { error: "Unknown capture type. Use the latest extension." }, 400);
   } catch (err: any) {
     console.log(`  \x1b[31mx\x1b[0m Error: ${err.message}`);
     sendJson(res, { error: err.message }, 500);
@@ -285,7 +280,7 @@ async function handleListSites(res: ServerResponse) {
 
       const captures = files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
       const hasDesignMd = files.includes("design.md");
-      const hasComponents = files.includes("components-tailwind.html");
+      const hasComponents = files.includes("components.html");
 
       const pages = [];
       for (const cap of captures) {
@@ -334,43 +329,6 @@ async function handleSiteDetail(siteName: string, res: ServerResponse) {
   }
 }
 
-async function handleGetDesignMd(siteName: string, res: ServerResponse) {
-  const filePath = join(DATA_DIR, siteName, "design.md");
-  if (!existsSync(filePath)) {
-    return send404(res);
-  }
-  const content = await readFile(filePath, "utf-8");
-  sendText(res, content, "text/plain; charset=utf-8");
-}
-
-async function handleGenerateDesignMd(siteName: string, res: ServerResponse) {
-  const siteDir = join(DATA_DIR, siteName);
-  try {
-    const files = await readdir(siteDir);
-    const renderedFiles = files.filter((f) => f.startsWith("rendered-") && f.endsWith(".html"));
-
-    if (renderedFiles.length === 0) {
-      return sendJson(res, { error: "No rendered HTML files to extract from" }, 400);
-    }
-
-    let allHtml = "";
-    for (const f of renderedFiles) {
-      const html = await readFile(join(siteDir, f), "utf-8");
-      allHtml += html + "\n";
-    }
-
-    const displayName = siteName.charAt(0).toUpperCase() + siteName.slice(1);
-    const md = generateDesignMd(allHtml, displayName);
-
-    await writeFile(join(siteDir, "design.md"), md, "utf-8");
-    console.log(`  \x1b[32m+\x1b[0m Generated ${siteName}/design.md (${(md.length / 1024).toFixed(1)}KB)`);
-
-    sendJson(res, { success: true, sizeKB: (md.length / 1024).toFixed(1) });
-  } catch (err: any) {
-    sendJson(res, { error: err.message }, 500);
-  }
-}
-
 async function handleAgentPrompt(siteName: string, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
   try {
@@ -382,8 +340,7 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
     }
 
     const capturePaths = captureFiles.map((f) => join(siteDir, f));
-    const componentsPath = join(siteDir, "components-tailwind.html");
-    const designMdPath = join(siteDir, "design.md");
+    const componentsPath = join(siteDir, "components.html");
     const promptFilePath = join(PKG_ROOT, "scripts", "prompts", "generate-components.md");
 
     // Read the component generation prompt
@@ -394,12 +351,21 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
       componentPrompt = "See the generate-components.md prompt file for full instructions.";
     }
 
+    // Read the agent instructions
+    const instructionsPath = join(PKG_ROOT, "scripts", "prompts", "agent-instructions.md");
+    let agentInstructions = "";
+    try {
+      agentInstructions = await readFile(instructionsPath, "utf-8");
+    } catch {}
+
+    const designSystemPath = join(siteDir, "design-system.html");
+
     const prompt = [
-      `You have captured HTML files for the "${siteName}" website. Complete these two steps:`,
+      `You have captured HTML files for the "${siteName}" website. Complete these steps:`,
       ``,
-      `## Step 1: Generate components-tailwind.html`,
+      `## Step 1: Generate components.html`,
       ``,
-      `Read ALL the captured HTML files below. These are self-contained HTML files with all CSS inlined and scripts stripped. No rendering step is needed — these files ARE the renderable pages.`,
+      `Read ALL the captured HTML files below. These are self-contained HTML files with all CSS inlined and scripts stripped.`,
       `Extract EVERY unique UI component from the pages and recreate each one using clean Tailwind CSS.`,
       ``,
       `CRITICAL: Do NOT fabricate any content. Only use text, icons, labels, and content that EXIST in the source HTML files.`,
@@ -411,25 +377,40 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
       ``,
       `Save the components file to: ${componentsPath}`,
       ``,
-      `## Step 2: Generate design.md`,
+      `## Step 2: Generate design-system.html`,
       ``,
-      `After creating components-tailwind.html, read it and generate a comprehensive design.md file.`,
-      `The design.md should document the complete design system including:`,
-      `- Color palette with exact values`,
-      `- Typography scale`,
-      `- Spacing system`,
-      `- Border radius values`,
-      `- Component patterns with Tailwind code examples`,
-      `- Layout patterns`,
+      `After creating components.html, generate a design-system.html file that documents the complete design system.`,
+      `This should be a standalone HTML file (using Tailwind CSS browser CDN) that shows:`,
       ``,
-      `Save the design.md to: ${designMdPath}`,
+      `- **Color Palette** — every unique color as visual swatches with exact values (hex, rgb, lch, oklch — whatever the source uses)`,
+      `- **Typography Scale** — every font size/weight/line-height combination rendered as text samples`,
+      `- **Spacing Scale** — visual representation of padding/gap/margin values used`,
+      `- **Border Radius Scale** — visual examples of each radius value`,
+      `- **Shadows** — visual examples of each box-shadow`,
+      `- **Icon Set** — all icons used, rendered at their sizes`,
+      `- **Component Recipes** — for EACH component, show: the Tailwind classes needed, a rendered preview, and copy-paste HTML`,
+      ``,
+      `This file should be a visual reference that a developer opens in a browser to see the entire design system.`,
+      `Use the EXACT values from components.html — do NOT approximate or use generic Tailwind classes.`,
+      ``,
+      `Save to: ${designSystemPath}`,
+      ``,
+      `## Step 3: Save instructions.md`,
+      ``,
+      `Save the following instructions file. These tell AI agents how to use the design system.`,
+      ``,
+      `Save to: ${join(siteDir, "instructions.md")}`,
+      ``,
+      `--- BEGIN INSTRUCTIONS ---`,
+      agentInstructions,
+      `--- END INSTRUCTIONS ---`,
     ].join("\n");
 
     sendJson(res, {
       prompt,
       capturePaths,
       componentsPath,
-      designMdPath,
+      instructionsPath: join(siteDir, "instructions.md"),
     });
   } catch (err: any) {
     sendJson(res, { error: err.message }, 500);
@@ -506,64 +487,4 @@ async function savePowerCapture(pageUrl: string, htmlData: string, title?: strin
   };
 }
 
-// ─── Save and render (legacy figh2d) ──────────────
-
-async function saveAndRender(pageUrl: string, data: string, title?: string, fonts?: { links?: string[]; fontFaces?: string[] }) {
-  const parsed = new URL(pageUrl);
-  const siteName = parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-");
-  const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
-
-  const siteDir = join(DATA_DIR, siteName);
-  await mkdir(siteDir, { recursive: true });
-
-  // Save raw capture
-  const rawFilename = `capture-${pathSlug}.html`;
-  let rawOutput: string;
-  if (data.includes("figh2d)")) {
-    rawOutput = data;
-  } else {
-    rawOutput = `<meta charset='utf-8'><html><head></head><body><span data-h2d="<!--(figh2d)${Buffer.from(data).toString("base64")}(/figh2d)-->"></span></body></html>`;
-  }
-  await writeFile(join(siteDir, rawFilename), rawOutput, "utf-8");
-
-  // Render to HTML
-  const renderedFilename = `rendered-${pathSlug}.html`;
-  let renderedOutput: string;
-  try {
-    const figh2d = parseFigH2D(rawOutput);
-    const assetMap = buildAssetMap(figh2d);
-    const bodyNode = figh2d.root.childNodes?.find((n: any) => n.tag === "BODY");
-
-    const ctx: RenderContext = {
-      bodyFont: bodyNode?.styles?.fontFamily || "",
-      bodyColor: bodyNode?.styles?.color || "",
-      assetMap,
-    };
-
-    const contentHtml = renderNode(bodyNode || figh2d.root, 0, 0, 0, ctx);
-
-    renderedOutput = buildPage({
-      title: title || figh2d.documentTitle,
-      primaryFont: bodyNode?.styles?.fontFamily || "system-ui, sans-serif",
-      bgColor: bodyNode?.styles?.backgroundColor || "rgb(255, 255, 255)",
-      textColor: bodyNode?.styles?.color || "rgb(0, 0, 0)",
-      pageWidth: figh2d.documentRect.width,
-      pageHeight: figh2d.documentRect.height,
-      contentHtml,
-      fontLinks: fonts?.links,
-      fontFaces: fonts?.fontFaces,
-    });
-  } catch {
-    renderedOutput = `<!-- Render failed for ${pageUrl} -->`;
-  }
-
-  await writeFile(join(siteDir, renderedFilename), renderedOutput, "utf-8");
-
-  return {
-    siteName,
-    rawFilename,
-    renderedFilename,
-    rawKB: (rawOutput.length / 1024).toFixed(0),
-    renderedKB: (renderedOutput.length / 1024).toFixed(0),
-  };
-}
+// Legacy saveAndRender removed — all captures now use savePowerCapture

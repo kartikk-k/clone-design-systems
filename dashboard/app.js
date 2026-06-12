@@ -35,7 +35,7 @@ function clearTabActiveState(tabsEl) {
 
 let sites = [];
 let currentSite = null;
-let currentTab = "design-md";
+let currentTab = "components";
 
 const API = window.location.origin;
 
@@ -75,7 +75,7 @@ function handleRoute() {
 
   if (siteMatch) {
     const siteName = decodeURIComponent(siteMatch[1]);
-    const tab = siteMatch[2] === "/pages" ? "pages" : siteMatch[2] === "/components" ? "components" : "design-md";
+    const tab = siteMatch[2] === "/pages" ? "pages" : "components";
     const site = sites.find((s) => s.name === siteName);
     if (site) {
       currentSite = site;
@@ -142,15 +142,7 @@ async function loadSites() {
   }
 }
 
-async function loadDesignMd(siteName) {
-  try {
-    const res = await fetch(`${API}/api/sites/${siteName}/design.md`);
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
-  }
-}
+// loadDesignMd removed — replaced by components.html
 
 async function generateDesignMd(siteName) {
   try {
@@ -179,7 +171,7 @@ async function deleteCapture(siteName, filename) {
 
 function renderWelcome() {
   const totalPages = sites.reduce((sum, s) => sum + s.pages.length, 0);
-  const withDesign = sites.filter((s) => s.hasDesignMd).length;
+  const withDesign = sites.filter((s) => s.hasComponents).length;
   const filtered = welcomeFilter
     ? sites.filter((s) => s.name.toLowerCase().includes(welcomeFilter.toLowerCase()))
     : sites;
@@ -201,7 +193,7 @@ function renderWelcome() {
       </div>
       <div class="stat-card">
         <div class="stat-value">${withDesign}</div>
-        <div class="stat-label">design.md ready</div>
+        <div class="stat-label">Components ready</div>
       </div>
     </div>
 
@@ -240,8 +232,8 @@ function renderWelcomeGrid(grid) {
     card.type = "button";
     card.className = "welcome-site-card";
 
-    const dotClass = site.hasDesignMd ? "welcome-card-dot--ready" : "welcome-card-dot--empty";
-    const statusText = site.hasDesignMd ? "design.md" : "No design.md";
+    const dotClass = site.hasComponents ? "welcome-card-dot--ready" : "welcome-card-dot--empty";
+    const statusText = site.hasComponents ? "Components" : "No components";
 
     card.innerHTML = `
       <div class="welcome-card-avatar">${site.name.slice(0, 2).toUpperCase()}</div>
@@ -304,7 +296,7 @@ function renderSiteDetail() {
 
   topbarTitle.textContent = site.name;
   topbarSep.style.display = "";
-  topbarPage.textContent = currentTab === "pages" ? "Pages" : "design.md";
+  topbarPage.textContent = currentTab === "pages" ? "Pages" : "Components";
 
   // Topbar actions
   topbarActions.innerHTML = `
@@ -321,9 +313,9 @@ function renderSiteDetail() {
   hero.className = "site-hero";
 
   const pageCount = site.pages.length;
-  const statusHtml = site.hasDesignMd
-    ? `<span class="status-badge status-badge--ready"><span class="status-badge-dot"></span>design.md ready</span>`
-    : `<span class="status-badge status-badge--empty"><span class="status-badge-dot"></span>No design.md</span>`;
+  const statusHtml = site.hasComponents
+    ? `<span class="status-badge status-badge--ready"><span class="status-badge-dot"></span>Components ready</span>`
+    : `<span class="status-badge status-badge--empty"><span class="status-badge-dot"></span>No components</span>`;
 
   const iconBtnStyle = `${BTN_ICON}`;
 
@@ -331,7 +323,7 @@ function renderSiteDetail() {
     <div class="site-hero-top">
       <div class="site-hero-avatar">${site.name.slice(0, 2).toUpperCase()}</div>
       <div class="site-hero-icon-actions">
-        <button type="button" class="${iconBtnStyle}" title="Download design.md" onclick="downloadDesignMd('${site.name}')" ${site.hasDesignMd ? "" : 'style="display:none"'}>
+        <button type="button" class="${iconBtnStyle}" title="Download components" onclick="downloadComponents('${site.name}')" ${site.hasComponents ? "" : 'style="display:none"'}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
         <button type="button" class="${iconBtnStyle}" title="Delete site" onclick="confirmDeleteSite('${site.name}')">
@@ -348,22 +340,28 @@ function renderSiteDetail() {
   // Fill hero actions — only primary CTAs
   const heroActions = document.getElementById("heroActions");
   const heroBtn = 'style="height:32px;font-size:12px;padding:0 16px;"';
-  if (site.hasDesignMd) {
-    heroActions.innerHTML = `
-      <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyDesignMd('${site.name}')">Copy design.md</button>
-      <button type="button" class="${BTN_ACCENT}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+  heroActions.innerHTML = `
+    <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+  `;
+
+  // Add CLI command block if components exist
+  if (site.hasComponents) {
+    const cmdBlock = document.createElement("div");
+    cmdBlock.className = "site-hero-cmd";
+    cmdBlock.innerHTML = `
+      <span class="site-hero-cmd-label">Add to your project</span>
+      <button type="button" class="site-hero-cmd-box" onclick="copyAddCommand('${site.name}')" title="Click to copy">
+        <code>npx designgrab add ${site.name}</code>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
     `;
-  } else {
-    heroActions.innerHTML = `
-      <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
-    `;
+    heroActions.parentElement.appendChild(cmdBlock);
   }
 
   // Tabs
   const tabs = document.createElement("div");
   tabs.className = "tabs tabs-bar-retool";
   tabs.innerHTML = `
-    <button type="button" class="${tabClass(currentTab === "design-md")}" onclick="switchTab('design-md')">design.md</button>
     <button type="button" class="${tabClass(currentTab === "components")}" onclick="switchTab('components')">Components</button>
     <button type="button" class="${tabClass(currentTab === "pages")}" onclick="switchTab('pages')">Pages</button>
   `;
@@ -371,10 +369,8 @@ function renderSiteDetail() {
 
   if (currentTab === "pages") {
     renderPagesTab(site);
-  } else if (currentTab === "components") {
-    renderComponentsTab(site);
   } else {
-    renderDesignMdTab(site);
+    renderComponentsTab(site);
   }
 }
 
@@ -396,10 +392,8 @@ function switchTab(tab) {
 
   if (tab === "pages") {
     renderPagesTab(currentSite);
-  } else if (tab === "components") {
-    renderComponentsTab(currentSite);
   } else {
-    renderDesignMdTab(currentSite);
+    renderComponentsTab(currentSite);
   }
 }
 
@@ -562,18 +556,28 @@ async function renderComponentsTab(site) {
   container.appendChild(content);
   siteContent.appendChild(container);
 
-  // Try to load components-tailwind.html
+  // Try to load components.html
   try {
     const res = await fetch(`${API}/api/sites/${site.name}/components`);
     if (res.ok) {
       const html = await res.text();
 
-      // Section header
+      // Section header with download buttons
       const header = document.createElement("div");
       header.className = "md-section-header";
       header.innerHTML = `
         <span class="md-section-label">Components</span>
-        <span class="md-section-meta">${(html.length / 1024).toFixed(1)} KB</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="${BTN_ACCENT}" style="height:28px;font-size:11px;padding:0 12px;" onclick="downloadComponents('${site.name}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Components
+          </button>
+          <button type="button" class="${BTN_ACCENT}" style="height:28px;font-size:11px;padding:0 12px;" onclick="downloadInstructions('${site.name}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Instructions
+          </button>
+          <span class="md-section-meta">${(html.length / 1024).toFixed(1)} KB</span>
+        </div>
       `;
       container.insertBefore(header, content);
 
@@ -611,10 +615,24 @@ async function copyDesignMd(siteName) {
   showToast("Copied design.md to clipboard", "success");
 }
 
-function downloadDesignMd(siteName) {
+function copyAddCommand(siteName) {
+  const cmd = `npx designgrab add ${siteName}`;
+  navigator.clipboard.writeText(cmd).then(() => {
+    showToast(`Copied: ${cmd}`, "success");
+  });
+}
+
+function downloadComponents(siteName) {
   const a = document.createElement("a");
-  a.href = `${API}/api/sites/${siteName}/design.md`;
-  a.download = `${siteName}-design.md`;
+  a.href = `${API}/api/sites/${siteName}/components`;
+  a.download = `${siteName}-components.html`;
+  a.click();
+}
+
+function downloadInstructions(siteName) {
+  const a = document.createElement("a");
+  a.href = `${API}/api/sites/${siteName}/instructions`;
+  a.download = `instructions.md`;
   a.click();
 }
 

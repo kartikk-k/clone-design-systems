@@ -1,19 +1,23 @@
 {
   "name": "designgrab",
-  "version": "0.1.1",
-  "description": "Grab any website's design system. Capture, render, and extract design tokens into a portable design.md file.",
+  "version": "0.1.3",
+  "description": "Grab any website's design system. Capture pages, extract components, and generate a portable Tailwind component library.",
   "type": "module",
   "bin": {
     "designgrab": "dist/bin/designgrab.mjs"
   },
   "files": [
     "dist/",
-    "dashboard/",
-    "extension/",
-    "instructions.md"
+    "dashboard/app.js",
+    "dashboard/index.html",
+    "dashboard/logo.png",
+    "extension/manifest.json",
+    "extension/popup.html",
+    "extension/popup.js",
+    "extension/icon*.png"
   ],
   "scripts": {
-    "build": "bun build server.ts --target=node --outfile=dist/server.mjs && bun build bin/designgrab.ts --target=node --outfile=dist/bin/designgrab.mjs",
+    "build": "bun build server.ts --target=node --outfile=dist/server.mjs && bun build bin/designgrab.ts --target=node --outfile=dist/bin/designgrab.mjs && cp scripts/prompts/agent-instructions.md dist/agent-instructions.md",
     "start": "node dist/server.mjs",
     "dev": "bun --hot server.ts",
     "prepublishOnly": "npm run build"

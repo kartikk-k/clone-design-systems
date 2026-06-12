@@ -1,96 +1,170 @@
-# Prompt: Generate Tailwind Components from Raw HTML
+# Prompt: Generate Design System from Captured HTML
 
-You are a design engineer. You are given the RAW BODY HTML of a website page (scripts stripped, CSS intact). Your job is to extract EVERY unique UI component visible on the page and recreate each one using clean Tailwind CSS.
+You are a design engineer. You are given captured HTML file(s) of a website (scripts stripped, all CSS inlined). Your job is to extract the COMPLETE design system and recreate it as a single Tailwind CSS file.
 
-## CRITICAL RULES — READ FIRST
+## CRITICAL RULES
 
 ### NEVER fabricate content
 - **ONLY use text, icons, labels, and content that EXIST in the source HTML.**
 - Do NOT invent card titles, descriptions, icon combinations, or badge text.
-- If the source has 4 cards with "Find bugs", "Scan codebase for vulnerabilities", "Generate docs", "Add test coverage" — use EXACTLY those. Do not create "Post to Discord on PR merge" or any other card that doesn't exist.
-- If the source has a Slack SVG icon, use that exact SVG. Do NOT substitute GitHub, Discord, or any other icon.
-- If a banner says "Refer friends, earn up to $250" with no description underneath, do NOT add a description.
+- If the source has specific cards, use EXACTLY those titles and descriptions.
+- If the source has a specific SVG icon, use that exact SVG. Do NOT substitute other icons.
+- If a component has no description in the source, do NOT add one.
 
-### Extract the EXACT component, not your interpretation
-- Copy the structure FROM the source. If a list item has `+103 -4` as plain text-tertiary (no colors), keep it that way. Do NOT add green/red coloring.
-- If the source nav uses custom icon font (`cursor-icon` class), represent icons with simple SVG placeholders BUT keep the same number and arrangement.
-- Match the EXACT number of items. If there are 4 nav items, show 4. If there are 5 filter tabs, show 5.
+### Extract the EXACT design, not your interpretation
+- Copy the structure FROM the source — exact number of items, exact text, exact arrangement.
+- If the source uses custom icon fonts, represent them with simple SVG placeholders BUT keep the same count and arrangement.
+- Match exact colors, spacing, font sizes — do NOT approximate.
 
-### Layout rules
-- Components should use FULL WIDTH of their container (with reasonable padding like `p-6` on body).
-- Do NOT center-align component sections. Left-align everything.
-- Do NOT add wrapper cards/borders around component sections. Use a simple label + the component.
-- Section labels should be minimal: `text-[11px] uppercase tracking-wider text-white/30 mb-3`
+### Layout
+- Components should use FULL WIDTH of their container (body has `p-6`).
+- Left-align everything. No centering of component sections.
+- No wrapper cards/borders around sections. Just a label + the component.
+- Section labels: `text-[11px] uppercase tracking-wider text-white/30 mb-3`
 
-## Input
-- The raw body HTML of the page (provided separately)
-- CSS variable definitions (provided separately)
+## Output Structure
 
-## Output Format
+Generate a single HTML file with Tailwind CSS v4 browser CDN. The file MUST include ALL of these sections in this order:
+
+### 1. Color Palette
+Extract EVERY unique color from the source CSS. Show visual swatches.
+
 ```html
-<!DOCTYPE html>
-<html class="dark">
-<head>
-  <meta charset="UTF-8">
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <style type="text/tailwindcss">
-    @theme {
-      /* Exact color tokens from the CSS */
-    }
-  </style>
-</head>
-<body class="bg-[#141414] text-[rgba(228,228,228,0.94)] font-[system-ui,...] p-6">
-
-  <!-- COMPONENT_NAME -->
-  <div class="mb-10">
-    <div class="text-[11px] uppercase tracking-wider text-white/30 mb-3">Component Name</div>
-    <!-- Component HTML using Tailwind -->
+<div class="mb-10">
+  <div class="text-[11px] uppercase tracking-wider text-white/30 mb-3">Color Palette</div>
+  <div class="mb-6">
+    <div class="text-[11px] text-white/20 mb-2">Backgrounds</div>
+    <div class="flex gap-3 flex-wrap">
+      <!-- For each background color: -->
+      <div class="text-center">
+        <div class="w-14 h-14 rounded-lg" style="background: [exact value]"></div>
+        <span class="text-[10px] text-white/30 mt-1 block">[name]</span>
+        <span class="text-[9px] text-white/20 block font-mono">[value]</span>
+      </div>
+    </div>
   </div>
-
-</body>
-</html>
+  <!-- Repeat for: Text colors, Border colors, Accent/Brand colors, Status colors -->
+</div>
 ```
 
-## What to extract
-Scan the ENTIRE page body HTML. Create a component section for EVERY unique UI pattern:
+Where to find colors:
+- `<html style="...">` tag — CSS custom properties
+- `<style>` blocks — `:root {}`, `.dark {}`, `[data-theme]` definitions
+- Modern color functions (`lch()`, `oklch()`, `color-mix()`) — use AS-IS, do NOT convert
+- Inline styles — `background-color`, `color`, `border-color` values
+- **Preserve the original color space** — if the source uses `lch()`, keep `lch()`
 
-1. **Sidebar nav items** — active and inactive states, exact labels from source
-2. **Section headers** — "Last 7 days" type dividers with any collapse chevrons
-3. **List items** — activity items, file items with exact metadata layout (stats, time)
-4. **Banners** — exact text, exact icon, exact dismiss pattern from source
-5. **User profile** — avatar, name, badge, action buttons as they appear
-6. **Page header** — exact title text, exact button text
-7. **Filter tabs** — exact labels, exact active/inactive styling (pill vs flat)
-8. **Cards** — exact titles, exact descriptions, exact icon arrangements from source
-9. **Buttons** — every variant that EXISTS in the source
-10. **Badges/Tags** — only ones that EXIST in the source
+### 2. Typography Scale
+Extract EVERY unique font-size/weight/line-height combination.
 
-## Design tokens to use
+```html
+<div class="mb-10">
+  <div class="text-[11px] uppercase tracking-wider text-white/30 mb-3">Typography</div>
+  <div class="flex flex-col gap-4">
+    <div>
+      <span class="text-[10px] text-white/20 font-mono">Page Title — [size]/[line-height] [weight]</span>
+      <p class="[exact tailwind classes]">[Sample text from source]</p>
+    </div>
+    <!-- Repeat for every text level -->
+  </div>
+</div>
+```
 
-Colors:
-- `#141414` — page bg
-- `#181818` — elevated surface
-- `rgba(228,228,228,0.94)` — text primary
-- `rgba(228,228,228,0.70)` — text secondary
-- `rgba(228,228,228,0.40)` — text tertiary
-- `rgba(228,228,228,0.12)` — border default
-- `rgba(228,228,228,0.06)` — hover bg / active tab bg
-- `rgba(228,228,228,0.04)` — subtle border (card shadow)
+Include: font-family, font-size, font-weight, line-height, letter-spacing, font-feature-settings if present.
 
-Sizing:
-- Nav item: `h-8 px-2 text-[13px] font-medium rounded-md`
-- Button (primary): `h-7 px-2 text-[13px] font-medium rounded-md`
-- Button (pill outline): `h-7 px-3 text-[13px] rounded-full border`
-- Filter tab (active): `rounded-full px-2.5 py-1 text-[13px] font-medium` with bg + border
-- Filter tab (inactive): no bg, no border, `text-[13px] font-medium text-tertiary`
-- Card: `rounded-xl p-3.5 gap-4` with `shadow-[0_0_0_1px_rgba(228,228,228,0.04)]`
-- Card title: `text-[13px] font-normal leading-[18px]`
-- Card description: `text-[12px] leading-4 line-clamp-3`
+### 3. Spacing Scale
+Document the padding, gap, and margin values used across components.
 
-## Final checklist
+### 4. Border Radius
+Show every unique border-radius with visual examples.
+
+### 5. Shadows
+Show every unique box-shadow with visual examples.
+
+### 6. UI Components
+Extract EVERY unique UI component. For each:
+
+**Components to extract (if they exist in the source):**
+
+1. **Navigation / Sidebar items** — active + inactive states, exact labels
+2. **Section headers / Dividers** — date groups, category labels
+3. **List items** — activity, files, commits with exact metadata (stats, dates, badges)
+4. **Banners / Alerts** — exact text, exact icon, dismiss pattern
+5. **User profile / Account** — avatar, name, plan badge, action buttons
+6. **Page header** — title, subtitle, action buttons
+7. **Filter tabs / Tab bar** — exact labels, exact active/inactive styling
+8. **Cards** — exact structure with exact content from source
+9. **Buttons** — EVERY variant present (primary, secondary, outline, ghost, icon, pill)
+10. **Form inputs** — text fields, selects, toggles, checkboxes
+11. **Badges / Tags / Status indicators**
+12. **Dropdowns / Context menus** — if captured
+13. **Modals / Dialogs** — if captured
+14. **Tooltips** — if captured
+15. **Tables / Data grids** — if present
+16. **Empty states** — if present
+17. **Loading states** — if present
+18. **Footer** — if present
+
+### 7. Layout Patterns
+Document the overall layout structure:
+- Sidebar width
+- Content max-width
+- Header height
+- Section spacing patterns
+
+## Color Extraction Protocol
+
+1. **First** check `<html>` tag `style` attribute for CSS custom properties
+2. **Then** search `<style>` blocks for `:root`, `.dark`, `[data-theme]` definitions
+3. **Then** find `lch()`, `oklch()`, `color-mix()`, `rgb()`, `rgba()` values
+4. **Then** count inline `color:`, `background-color:`, `border-color:` values
+5. Group by role: backgrounds, text, borders, accents, status
+6. **NEVER hardcode default colors** — always extract from the actual source
+7. **NEVER convert** `lch()`/`oklch()` to hex — use the original color space
+
+## @theme Block
+
+Define ALL extracted colors in the `@theme` block:
+
+```css
+@theme {
+  /* Backgrounds */
+  --color-page-bg: [exact value from source];
+  --color-surface: [exact value];
+  --color-elevated: [exact value];
+  --color-hover: [exact value];
+
+  /* Text */
+  --color-text-primary: [exact value];
+  --color-text-secondary: [exact value];
+  --color-text-tertiary: [exact value];
+  --color-text-muted: [exact value];
+
+  /* Borders */
+  --color-border-default: [exact value];
+  --color-border-subtle: [exact value];
+
+  /* Accent / Brand */
+  --color-accent: [exact value];
+
+  /* Status */
+  --color-success: [exact value];
+  --color-error: [exact value];
+  --color-warning: [exact value];
+}
+```
+
+## Final Checklist
+
+Before saving the file, verify:
+- [ ] Color palette section with EVERY unique color as visual swatches
+- [ ] Typography section with EVERY text level as rendered samples
+- [ ] Spacing and border-radius documented
+- [ ] Shadows documented (or noted as "none")
+- [ ] EVERY unique UI component extracted
 - [ ] Zero fabricated content — every word comes from the source
-- [ ] Exact icon arrangements from source (Slack SVG where Slack exists, not GitHub/Discord)
+- [ ] Exact icon arrangements from source
 - [ ] Full width layout, no centering
-- [ ] No wrapper borders around sections
-- [ ] All unique components extracted
-- [ ] Colors are exact rgba values, not approximations
+- [ ] No wrapper borders around component sections
+- [ ] Colors use exact values from source (no approximation, no color-space conversion)
+- [ ] `@theme` block defines all color tokens
