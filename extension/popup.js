@@ -307,7 +307,7 @@ capturePageBtn.addEventListener("click", async () => {
 
           // (border and shadow fixes are at the top of Step 1b)
 
-          console.log('[DG] Step 1b complete:', dgLog.overrideCount, 'var overrides,', shadowFixCount, 'shadow fixes');
+          console.log('[DG] Step 1b complete:', dgLog.overrideCount, 'var overrides');
         } catch (e) {
           console.warn('[DG] Error resolving CSS variables:', e.message);
         }
@@ -427,10 +427,12 @@ capturePageBtn.addEventListener("click", async () => {
 
     statusText.textContent = "Captured!";
     resultDiv.className = "result show success";
-    resultDiv.innerHTML = `
-      <strong>${result.site}</strong><br>
-      Saved: ${result.filename} (${result.sizeKB}KB)
-    `;
+    resultDiv.textContent = "";
+    const strong = document.createElement("strong");
+    strong.textContent = result.site;
+    resultDiv.appendChild(strong);
+    resultDiv.appendChild(document.createElement("br"));
+    resultDiv.appendChild(document.createTextNode(`Saved: ${result.filename} (${result.sizeKB}KB)`));
     capturePageBtn.disabled = false;
     capturePageBtn.textContent = "Capture Again";
   } catch (err) {
