@@ -1,6 +1,6 @@
 {
   "name": "designgrab",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "description": "Grab any website's design system. Capture pages, extract components, and generate a portable Tailwind component library.",
   "type": "module",
   "bin": {
