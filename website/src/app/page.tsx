@@ -2,6 +2,12 @@ import Link from "next/link";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import GradientShader from "@/components/gradient-shader";
+import {
+  POPULAR_SLUGS,
+  collectionLogoFilter,
+  collections,
+  type CollectionEntry,
+} from "@/data/collections";
 
 /** Minimal line icons for the “How it works” steps — white stroke, no fill. */
 function HowItWorksIllustration({ step }: { step: string }) {
@@ -62,39 +68,9 @@ function HowItWorksIllustration({ step }: { step: string }) {
   );
 }
 
-/** Popular collections — logo URLs from https://api.svgl.app (see SVGL docs). */
-const collections = [
-  {
-    name: "OpenAI",
-    slug: "openai",
-    logoUrl: "https://svgl.app/library/openai_dark.svg",
-  },
-  {
-    name: "Cursor",
-    slug: "cursor",
-    logoUrl: "https://svgl.app/library/cursor_dark.svg",
-  },
-  {
-    name: "Gemini",
-    slug: "gemini",
-    logoUrl: "https://svgl.app/library/gemini.svg",
-  },
-  {
-    name: "Stripe",
-    slug: "stripe",
-    logoUrl: "https://svgl.app/library/stripe.svg",
-  },
-  {
-    name: "Vercel",
-    slug: "vercel",
-    logoUrl: "https://svgl.app/library/vercel_dark.svg",
-  },
-  {
-    name: "Supabase",
-    slug: "supabase",
-    logoUrl: "https://svgl.app/library/supabase.svg",
-  },
-] as const;
+const popularCollections = POPULAR_SLUGS.map((slug) => collections.find((c) => c.slug === slug)).filter(
+  (c): c is CollectionEntry => c != null,
+);
 
 export default function Home() {
   return (
@@ -303,10 +279,12 @@ export default function Home() {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "24px" }}>
-            {collections.map((site) => (
+            {popularCollections.map((site) => {
+              const logoFilter = collectionLogoFilter(site);
+              return (
               <Link
                 key={site.slug}
-                href={`/collections#${site.slug}`}
+                href={`/collection/${site.slug}`}
                 className="no-underline block"
                 style={{
                   border: "1px solid rgba(255, 255, 255, 0.2)",
@@ -324,23 +302,25 @@ export default function Home() {
                   }}
                 >
                   {/* Monochrome white on dark UI (SVGL assets are brand-colored or light-gray). */}
-                  <img
-                    src={site.logoUrl}
-                    alt=""
-                    width={160}
-                    height={36}
-                    loading="lazy"
-                    decoding="async"
-                    style={{
-                      maxHeight: "36px",
-                      maxWidth: "160px",
-                      width: "auto",
-                      height: "auto",
-                      objectFit: "contain",
-                      objectPosition: "left center",
-                      filter: "brightness(0) invert(1)",
-                    }}
-                  />
+                  {site.logoUrl ? (
+                    <img
+                      src={site.logoUrl}
+                      alt=""
+                      width={160}
+                      height={36}
+                      loading="lazy"
+                      decoding="async"
+                      style={{
+                        maxHeight: "36px",
+                        maxWidth: "160px",
+                        width: "auto",
+                        height: "auto",
+                        objectFit: "contain",
+                        objectPosition: "left center",
+                        ...(logoFilter ? { filter: logoFilter } : {}),
+                      }}
+                    />
+                  ) : null}
                 </div>
                 <h3
                   style={{
@@ -367,7 +347,8 @@ export default function Home() {
                   Colors, typography, components & more
                 </p>
               </Link>
-            ))}
+            );
+            })}
           </div>
         </div>
       </section>

@@ -1,0 +1,21 @@
+# Source files (published as built dist/)
+server.ts
+bin/
+scripts/
+lib/
+
+# Dev files
+*.test.*
+*.spec.*
+tsconfig.json
+.gitignore
+.data/
+
+# Old legacy files (no longer used)
+instructions.md
+
+# Extension dev tools
+extension/build.ts
+
+# Old capture script (replaced by power.js in popup.js)
+extension/capture.js

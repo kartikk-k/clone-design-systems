@@ -10,14 +10,27 @@ export function buildPage(opts: {
   pageWidth: number;
   pageHeight: number;
   contentHtml: string;
+  fontLinks?: string[];
+  fontFaces?: string[];
 }): string {
+  // Build font loading tags from captured data
+  const fontLinkTags = (opts.fontLinks || [])
+    .map((href) => `  <link rel="stylesheet" href="${esc(href)}" />`)
+    .join("\n");
+
+  const fontFaceCSS = (opts.fontFaces || [])
+    .join("\n    ");
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${esc(opts.title)}</title>
+${fontLinkTags}
   <style>
+    /* Captured @font-face rules */
+    ${fontFaceCSS}
     /* Reset */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -53,6 +66,13 @@ export function buildPage(opts: {
     @font-face { font-family: 'OpenAI Sans'; src: local('Inter'), local('Helvetica Neue'); font-weight: 100 900; }
     @font-face { font-family: 'Geist'; src: local('Inter'), local('system-ui'); font-weight: 100 900; }
     @font-face { font-family: 'Geist Mono'; src: local('SF Mono'), local('Fira Code'); font-weight: 100 900; }
+    @font-face { font-family: 'Google Sans'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
+    @font-face { font-family: 'Google Sans Text'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
+    @font-face { font-family: 'Google Sans Display'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
+    @font-face { font-family: 'universalSansDisplay'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
+    @font-face { font-family: 'universalSansDisplay Fallback'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
+    @font-face { font-family: 'universalSans'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
+    @font-face { font-family: 'universalSans Fallback'; src: local('Inter'), local('Helvetica Neue'), local('Arial'); font-weight: 100 900; }
   </style>
 </head>
 <body>
