@@ -491,6 +491,10 @@ function printInstallSummary(name: string, outputDir: string) {
 
 function cmdStop() {
   const port = parseInt(getFlagValue("port") || String(DEFAULT_PORT));
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    error("Invalid port number.");
+    process.exit(1);
+  }
 
   try {
     // Find process on the port
@@ -518,6 +522,10 @@ function cmdStop() {
 
 function cmdStart() {
   const port = parseInt(getFlagValue("port") || String(DEFAULT_PORT));
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    error("Invalid port number.");
+    process.exit(1);
+  }
   const noOpen = getFlag("no-open");
 
   // Resolve server file
@@ -546,7 +554,7 @@ function cmdStart() {
       const openCmd = process.platform === "darwin" ? "open"
         : process.platform === "win32" ? "start"
         : "xdg-open";
-      exec(`${openCmd} ${url}`);
+      exec(`${openCmd} "${url}"`);
     }, 1000);
   }
 

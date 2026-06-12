@@ -31,6 +31,11 @@ function clearTabActiveState(tabsEl) {
   });
 }
 
+/** Escape a string for safe use in HTML content and attributes */
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // ─── State ──────────────────────────────────────
 
 let sites = [];
@@ -145,7 +150,7 @@ async function loadSites() {
 
 async function deleteCapture(siteName, filename) {
   try {
-    const res = await fetch(`${API}/api/sites/${siteName}/pages/${filename}`, { method: "DELETE" });
+    const res = await fetch(`${API}/api/sites/${encodeURIComponent(siteName)}/pages/${encodeURIComponent(filename)}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Delete failed");
     return true;
   } catch (e) {
@@ -223,9 +228,9 @@ function renderWelcomeGrid(grid) {
     const statusText = site.hasComponents ? "Components" : "No components";
 
     card.innerHTML = `
-      <div class="welcome-card-avatar">${site.name.slice(0, 2).toUpperCase()}</div>
+      <div class="welcome-card-avatar">${escHtml(site.name.slice(0, 2).toUpperCase())}</div>
       <div class="welcome-card-info">
-        <div class="welcome-card-name">${site.name}</div>
+        <div class="welcome-card-name">${escHtml(site.name)}</div>
         <div class="welcome-card-meta">
           ${site.pages.length} page${site.pages.length !== 1 ? "s" : ""}
           <span class="welcome-card-dot ${dotClass}"></span>
@@ -254,7 +259,7 @@ function renderSidebar() {
     btn.type = "button";
     btn.className = ["site-row", active ? "site-row-active" : ""].filter(Boolean).join(" ");
     btn.innerHTML = `
-      <span class="site-row-name">${site.name}</span>
+      <span class="site-row-name">${escHtml(site.name)}</span>
       <span class="site-count-badge">${site.pages.length}</span>
     `;
     btn.onclick = () => selectSite(site);
@@ -287,10 +292,11 @@ function renderSiteDetail() {
 
   // Topbar actions
   topbarActions.innerHTML = `
-    <button type="button" class="${BTN_ICON}" style="width:28px;height:28px;" title="Refresh" onclick="refreshSite()">
+    <button type="button" class="${BTN_ICON}" style="width:28px;height:28px;" title="Refresh" data-action="refresh">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
   `;
+  topbarActions.querySelector('[data-action="refresh"]')?.addEventListener("click", refreshSite);
 
   // Content
   siteContent.innerHTML = "";
@@ -308,28 +314,31 @@ function renderSiteDetail() {
 
   hero.innerHTML = `
     <div class="site-hero-top">
-      <div class="site-hero-avatar">${site.name.slice(0, 2).toUpperCase()}</div>
+      <div class="site-hero-avatar">${escHtml(site.name.slice(0, 2).toUpperCase())}</div>
       <div class="site-hero-icon-actions">
-        <button type="button" class="${iconBtnStyle}" title="Download components" onclick="downloadComponents('${site.name}')" ${site.hasComponents ? "" : 'style="display:none"'}>
+        <button type="button" class="${iconBtnStyle}" title="Download components" data-action="download" ${site.hasComponents ? "" : 'style="display:none"'}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button type="button" class="${iconBtnStyle}" title="Delete site" onclick="confirmDeleteSite('${site.name}')">
+        <button type="button" class="${iconBtnStyle}" title="Delete site" data-action="delete-site">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke="currentColor"><path d="M2.75 4.75H15.25"/><path d="M6.75 4.75V2.75C6.75 2.2 7.198 1.75 7.75 1.75H10.25C10.802 1.75 11.25 2.2 11.25 2.75V4.75"/><path d="M7.375 8.75L7.59219 13.25"/><path d="M10.625 8.75L10.4078 13.25"/><path d="M13.6977 7.75L13.35 14.35C13.294 15.4201 12.416 16.25 11.353 16.25H6.64804C5.58404 16.25 4.70703 15.42 4.65103 14.35L4.30334 7.75"/></g></svg>
         </button>
       </div>
     </div>
-    <h2 class="site-hero-name">${site.name}</h2>
+    <h2 class="site-hero-name">${escHtml(site.name)}</h2>
     <div class="site-hero-meta">${pageCount} page${pageCount !== 1 ? "s" : ""} captured &nbsp;·&nbsp; ${statusHtml}</div>
     <div class="site-hero-actions" id="heroActions"></div>
   `;
+  hero.querySelector('[data-action="download"]')?.addEventListener("click", () => downloadComponents(site.name));
+  hero.querySelector('[data-action="delete-site"]')?.addEventListener("click", () => confirmDeleteSite(site.name));
   siteContent.appendChild(hero);
 
   // Fill hero actions — only primary CTAs
   const heroActions = document.getElementById("heroActions");
   const heroBtn = 'style="height:32px;font-size:12px;padding:0 16px;"';
   heroActions.innerHTML = `
-    <button type="button" class="${BTN_PRIMARY}" ${heroBtn} onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+    <button type="button" class="${BTN_PRIMARY}" ${heroBtn} data-action="generate">Generate with agent</button>
   `;
+  heroActions.querySelector('[data-action="generate"]')?.addEventListener("click", () => copyAgentPrompt(site.name));
 
   // Add CLI command block if components exist
   if (site.hasComponents) {
@@ -337,11 +346,12 @@ function renderSiteDetail() {
     cmdBlock.className = "site-hero-cmd";
     cmdBlock.innerHTML = `
       <span class="site-hero-cmd-label">Add to your project</span>
-      <button type="button" class="site-hero-cmd-box" onclick="copyAddCommand('${site.name}')" title="Click to copy">
-        <code>npx designgrab add ${site.name}</code>
+      <button type="button" class="site-hero-cmd-box" data-action="copy-cmd" title="Click to copy">
+        <code>npx designgrab add ${escHtml(site.name)}</code>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </button>
     `;
+    cmdBlock.querySelector('[data-action="copy-cmd"]')?.addEventListener("click", () => copyAddCommand(site.name));
     heroActions.parentElement.appendChild(cmdBlock);
   }
 
@@ -394,15 +404,15 @@ function renderPagesTab(site) {
     const card = document.createElement("div");
     card.className = "page-card-retool group";
 
-    const previewUrl = `${API}/api/sites/${site.name}/preview/${page.capture}`;
+    const previewUrl = `${API}/api/sites/${encodeURIComponent(site.name)}/preview/${encodeURIComponent(page.capture)}`;
     const slug = page.slug;
 
     card.innerHTML = `
       <div class="page-card-preview page-card-preview-wrap">
-        <iframe src="${previewUrl}" loading="lazy" sandbox="allow-same-origin allow-scripts" title="Preview ${slug}"></iframe>
+        <iframe src="${previewUrl}" loading="lazy" sandbox="allow-same-origin" title="Preview ${escHtml(slug)}"></iframe>
       </div>
       <div class="page-card-footer">
-        <span class="page-card-slug">${slug}</span>
+        <span class="page-card-slug">${escHtml(slug)}</span>
         <span class="page-card-kb">${page.captureKB || "?"}KB</span>
       </div>
     `;
@@ -433,23 +443,28 @@ function openPagePreview(siteName, page, slug) {
   const toolbar = document.createElement("div");
   toolbar.className = "toolbar-retool";
   toolbar.innerHTML = `
-    <button type="button" class="${BTN_SECONDARY}" onclick="switchTab('pages')">
+    <button type="button" class="${BTN_SECONDARY}" data-action="back">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       Back
     </button>
     <span class="toolbar-spacer"></span>
-    <button type="button" class="${BTN_SECONDARY}" onclick="window.open('${API}/api/sites/${siteName}/preview/${page.capture}', '_blank')">
+    <button type="button" class="${BTN_SECONDARY}" data-action="open-tab">
       Open in new tab
     </button>
-    <button type="button" class="${BTN_DANGER}" onclick="confirmDeletePage('${siteName}', '${page.capture}')">
+    <button type="button" class="${BTN_DANGER}" data-action="delete-page">
       Delete
     </button>
   `;
+  toolbar.querySelector('[data-action="back"]')?.addEventListener("click", () => switchTab("pages"));
+  toolbar.querySelector('[data-action="open-tab"]')?.addEventListener("click", () => {
+    window.open(`${API}/api/sites/${encodeURIComponent(siteName)}/preview/${encodeURIComponent(page.capture)}`, "_blank");
+  });
+  toolbar.querySelector('[data-action="delete-page"]')?.addEventListener("click", () => confirmDeletePage(siteName, page.capture));
   panel.appendChild(toolbar);
 
   const frame = document.createElement("div");
   frame.className = "preview-frame-retool page-preview-frame";
-  frame.innerHTML = `<iframe src="${API}/api/sites/${siteName}/preview/${page.capture}" title="Full preview ${slug}"></iframe>`;
+  frame.innerHTML = `<iframe src="${API}/api/sites/${encodeURIComponent(siteName)}/preview/${encodeURIComponent(page.capture)}" sandbox="allow-same-origin" title="Full preview ${escHtml(slug)}"></iframe>`;
   panel.appendChild(frame);
 
   siteContent.appendChild(panel);
@@ -498,7 +513,7 @@ async function renderComponentsTab(site) {
 
   // Try to load components.html
   try {
-    const res = await fetch(`${API}/api/sites/${site.name}/components`);
+    const res = await fetch(`${API}/api/sites/${encodeURIComponent(site.name)}/components`);
     if (res.ok) {
       const html = await res.text();
 
@@ -508,23 +523,30 @@ async function renderComponentsTab(site) {
       header.innerHTML = `
         <span class="md-section-label">Components</span>
         <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" class="${BTN_ACCENT}" style="height:28px;font-size:11px;padding:0 12px;" onclick="downloadComponents('${site.name}')">
+          <button type="button" class="${BTN_ACCENT}" style="height:28px;font-size:11px;padding:0 12px;" data-action="dl-components">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Components
           </button>
-          <button type="button" class="${BTN_ACCENT}" style="height:28px;font-size:11px;padding:0 12px;" onclick="downloadInstructions('${site.name}')">
+          <button type="button" class="${BTN_ACCENT}" style="height:28px;font-size:11px;padding:0 12px;" data-action="dl-instructions">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Instructions
           </button>
           <span class="md-section-meta">${(html.length / 1024).toFixed(1)} KB</span>
         </div>
       `;
+      header.querySelector('[data-action="dl-components"]')?.addEventListener("click", () => downloadComponents(site.name));
+      header.querySelector('[data-action="dl-instructions"]')?.addEventListener("click", () => downloadInstructions(site.name));
       container.insertBefore(header, content);
 
       // Render in iframe for proper isolation (Tailwind needs its own context)
       content.className = "preview-frame-retool";
       content.style.height = "calc(100vh - 12rem)";
-      content.innerHTML = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width:100%;height:100%;border:0;border-radius:6px;"></iframe>`;
+      const iframe = document.createElement("iframe");
+      iframe.srcdoc = html;
+      iframe.sandbox = "allow-same-origin";
+      iframe.style.cssText = "width:100%;height:100%;border:0;border-radius:6px;";
+      content.innerHTML = "";
+      content.appendChild(iframe);
     } else {
       content.className = "panel-block";
       content.innerHTML = "";
@@ -538,13 +560,14 @@ async function renderComponentsTab(site) {
         <div class="empty-state-title">No components yet</div>
         <div class="empty-state-desc">Generate components from captured pages using the agent prompt. The agent will create a Tailwind component library from your captures.</div>
         <div class="empty-state-actions">
-          <button type="button" class="${BTN_PRIMARY}" onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
+          <button type="button" class="${BTN_PRIMARY}" data-action="generate-empty">Generate with agent</button>
         </div>
       `;
       content.appendChild(empty);
+      empty.querySelector('[data-action="generate-empty"]')?.addEventListener("click", () => copyAgentPrompt(site.name));
     }
   } catch (e) {
-    content.innerHTML = `<span class="md-section-meta">Error: ${e.message}</span>`;
+    content.innerHTML = `<span class="md-section-meta">Error: ${escHtml(e.message)}</span>`;
   }
 }
 
@@ -557,21 +580,21 @@ function copyAddCommand(siteName) {
 
 function downloadComponents(siteName) {
   const a = document.createElement("a");
-  a.href = `${API}/api/sites/${siteName}/components`;
+  a.href = `${API}/api/sites/${encodeURIComponent(siteName)}/components`;
   a.download = `${siteName}-components.html`;
   a.click();
 }
 
 function downloadInstructions(siteName) {
   const a = document.createElement("a");
-  a.href = `${API}/api/sites/${siteName}/instructions`;
+  a.href = `${API}/api/sites/${encodeURIComponent(siteName)}/instructions`;
   a.download = `instructions.md`;
   a.click();
 }
 
 async function copyAgentPrompt(siteName) {
   try {
-    const res = await fetch(`${API}/api/sites/${siteName}/agent-prompt`);
+    const res = await fetch(`${API}/api/sites/${encodeURIComponent(siteName)}/agent-prompt`);
     if (!res.ok) throw new Error("Failed to get prompt");
     const data = await res.json();
     await navigator.clipboard.writeText(data.prompt);

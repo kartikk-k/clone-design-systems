@@ -21,6 +21,19 @@ const PKG_ROOT = __dirname.endsWith("dist") ? join(__dirname, "..") : __dirname;
 const port = parseInt(process.argv.find((_, i, a) => a[i - 1] === "--port") || "3847");
 const DATA_DIR = join(homedir(), ".designgrab");
 
+/** Sanitize a name to prevent path traversal — only allows alphanumeric, dots, hyphens, underscores */
+function safeName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "");
+}
+
+/** Validate that a resolved path is inside DATA_DIR */
+function assertInsideDataDir(resolved: string): void {
+  const normalized = join(resolved, ".");
+  if (!normalized.startsWith(DATA_DIR)) {
+    throw new Error("Invalid path");
+  }
+}
+
 // Ensure data dir exists
 await mkdir(DATA_DIR, { recursive: true });
 
@@ -58,28 +71,44 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-function corsHeaders(): Record<string, string> {
+const ALLOWED_ORIGINS = new Set([
+  `http://localhost:${port}`,
+  `http://127.0.0.1:${port}`,
+]);
+
+function getAllowedOrigin(req?: IncomingMessage): string {
+  const origin = req?.headers?.origin || "";
+  // Allow localhost and chrome extensions
+  if (ALLOWED_ORIGINS.has(origin) || origin.startsWith("chrome-extension://")) {
+    return origin;
+  }
+  // Default to self for same-origin requests (no Origin header)
+  return `http://localhost:${port}`;
+}
+
+function corsHeaders(req?: IncomingMessage): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": getAllowedOrigin(req),
     "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Vary": "Origin",
   };
 }
 
-function sendJson(res: ServerResponse, data: unknown, status = 200) {
+function sendJson(res: ServerResponse, data: unknown, status = 200, req?: IncomingMessage) {
   const body = JSON.stringify(data);
-  const headers = { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8" };
+  const headers = { ...corsHeaders(req), "Content-Type": "application/json; charset=utf-8" };
   res.writeHead(status, headers);
   res.end(body);
 }
 
-function sendText(res: ServerResponse, text: string, contentType: string, status = 200, extra: Record<string, string> = {}) {
-  res.writeHead(status, { ...corsHeaders(), "Content-Type": contentType, ...extra });
+function sendText(res: ServerResponse, text: string, contentType: string, status = 200, extra: Record<string, string> = {}, req?: IncomingMessage) {
+  res.writeHead(status, { ...corsHeaders(req), "Content-Type": contentType, ...extra });
   res.end(text);
 }
 
-function send404(res: ServerResponse, message = "Not found") {
-  res.writeHead(404, corsHeaders());
+function send404(res: ServerResponse, message = "Not found", req?: IncomingMessage) {
+  res.writeHead(404, corsHeaders(req));
   res.end(message);
 }
 
@@ -93,10 +122,19 @@ async function sendFile(res: ServerResponse, filePath: string, contentType: stri
   res.end(data);
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, maxBytes = 50 * 1024 * 1024): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk) => chunks.push(chunk));
+    let total = 0;
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
@@ -110,7 +148,7 @@ const server = createServer(async (req, res) => {
   const method = req.method || "GET";
 
   if (method === "OPTIONS") {
-    res.writeHead(204, corsHeaders());
+    res.writeHead(204, corsHeaders(req));
     res.end();
     return;
   }
@@ -133,7 +171,7 @@ const server = createServer(async (req, res) => {
     // ─── Health ───────────────────────────────
 
     if (path === "/health") {
-      return sendJson(res, { status: "ok", version: "2.0" });
+      return sendJson(res, { status: "ok", version: "2.0" }, 200, req);
     }
 
     // ─── Capture (from extension) ─────────────
@@ -145,29 +183,31 @@ const server = createServer(async (req, res) => {
     // ─── API: List sites with detail ──────────
 
     if ((path === "/api/sites" || path === "/sites") && method === "GET") {
-      return await handleListSites(res);
+      return await handleListSites(req, res);
     }
 
     // ─── API: Site detail ─────────────────────
 
     const siteMatch = path.match(/^\/api\/sites\/([^/]+)$/);
     if (siteMatch && method === "GET") {
-      return await handleSiteDetail(siteMatch[1]!, res);
+      return await handleSiteDetail(safeName(siteMatch[1]!), req, res);
     }
     if (siteMatch && method === "DELETE") {
-      return await handleDeleteSite(siteMatch[1]!, res);
+      return await handleDeleteSite(safeName(siteMatch[1]!), req, res);
     }
 
     // ─── API: components.html ────────
 
     const componentsMatch = path.match(/^\/api\/sites\/([^/]+)\/components$/);
     if (componentsMatch && method === "GET") {
-      const filePath = join(DATA_DIR, componentsMatch[1]!, "components.html");
+      const site = safeName(componentsMatch[1]!);
+      const filePath = join(DATA_DIR, site, "components.html");
+      assertInsideDataDir(filePath);
       if (existsSync(filePath)) {
         const content = await readFile(filePath, "utf-8");
-        sendText(res, content, "text/html; charset=utf-8");
+        sendText(res, content, "text/html; charset=utf-8", 200, {}, req);
       } else {
-        send404(res);
+        send404(res, "Not found", req);
       }
       return;
     }
@@ -176,15 +216,17 @@ const server = createServer(async (req, res) => {
 
     const instructionsMatch = path.match(/^\/api\/sites\/([^/]+)\/instructions$/);
     if (instructionsMatch && method === "GET") {
+      const site = safeName(instructionsMatch[1]!);
       // Try site-specific instructions first, then global
-      const siteInstr = join(DATA_DIR, instructionsMatch[1]!, "instructions.md");
+      const siteInstr = join(DATA_DIR, site, "instructions.md");
+      assertInsideDataDir(siteInstr);
       const globalInstr = join(PKG_ROOT, "scripts", "prompts", "agent-instructions.md");
       const filePath = existsSync(siteInstr) ? siteInstr : globalInstr;
       if (existsSync(filePath)) {
         const content = await readFile(filePath, "utf-8");
-        sendText(res, content, "text/plain; charset=utf-8");
+        sendText(res, content, "text/plain; charset=utf-8", 200, {}, req);
       } else {
-        send404(res);
+        send404(res, "Not found", req);
       }
       return;
     }
@@ -194,31 +236,31 @@ const server = createServer(async (req, res) => {
 
     const agentPromptMatch = path.match(/^\/api\/sites\/([^/]+)\/agent-prompt$/);
     if (agentPromptMatch && method === "GET") {
-      return await handleAgentPrompt(agentPromptMatch[1]!, res);
+      return await handleAgentPrompt(safeName(agentPromptMatch[1]!), req, res);
     }
 
     // ─── API: Preview rendered HTML ───────────
 
     const previewMatch = path.match(/^\/api\/sites\/([^/]+)\/preview\/(.+)$/);
     if (previewMatch && method === "GET") {
-      return await handlePreview(previewMatch[1]!, previewMatch[2]!, res);
+      return await handlePreview(safeName(previewMatch[1]!), previewMatch[2]!, req, res);
     }
 
     // ─── API: Delete a capture ────────────────
 
     const deleteMatch = path.match(/^\/api\/sites\/([^/]+)\/pages\/(.+)$/);
     if (deleteMatch && method === "DELETE") {
-      return await handleDeletePage(deleteMatch[1]!, deleteMatch[2]!, res);
+      return await handleDeletePage(safeName(deleteMatch[1]!), deleteMatch[2]!, req, res);
     }
 
-    sendJson(res, { error: "Not found" }, 404);
+    sendJson(res, { error: "Not found" }, 404, req);
   } catch (err: any) {
     console.error("Server error:", err);
-    sendJson(res, { error: err.message }, 500);
+    sendJson(res, { error: "Internal server error" }, 500, req);
   }
 });
 
-server.listen(port, () => {
+server.listen(port, "127.0.0.1", () => {
   console.log("");
   console.log("  \x1b[36m\x1b[1mDesign Grab\x1b[0m");
   console.log(`  \x1b[2mDashboard:  http://localhost:${port}\x1b[0m`);
@@ -241,7 +283,7 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
     };
 
     if (!body.url || !body.data) {
-      return sendJson(res, { error: "Missing url or data" }, 400);
+      return sendJson(res, { error: "Missing url or data" }, 400, req);
     }
 
     // New power capture: clean HTML with CSS inlined, scripts stripped
@@ -253,19 +295,19 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
         site: result.siteName,
         filename: result.filename,
         sizeKB: result.sizeKB,
-      });
+      }, 200, req);
       return;
     }
 
     // Unknown capture type
-    sendJson(res, { error: "Unknown capture type. Use the latest extension." }, 400);
+    sendJson(res, { error: "Unknown capture type. Use the latest extension." }, 400, req);
   } catch (err: any) {
     console.log(`  \x1b[31mx\x1b[0m Error: ${err.message}`);
-    sendJson(res, { error: err.message }, 500);
+    sendJson(res, { error: "Capture failed" }, 500, req);
   }
 }
 
-async function handleListSites(res: ServerResponse) {
+async function handleListSites(req: IncomingMessage, res: ServerResponse) {
   try {
     const entries = await readdir(DATA_DIR, { withFileTypes: true });
     const sites = [];
@@ -307,34 +349,36 @@ async function handleListSites(res: ServerResponse) {
     }
 
     sites.sort((a, b) => a.name.localeCompare(b.name));
-    sendJson(res, { sites });
+    sendJson(res, { sites }, 200, req);
   } catch {
-    sendJson(res, { sites: [] });
+    sendJson(res, { sites: [] }, 200, req);
   }
 }
 
-async function handleSiteDetail(siteName: string, res: ServerResponse) {
+async function handleSiteDetail(siteName: string, req: IncomingMessage, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
+  assertInsideDataDir(siteDir);
   try {
     const files = await readdir(siteDir);
     sendJson(res, {
       name: siteName,
       files,
       hasDesignMd: files.includes("design.md"),
-    });
+    }, 200, req);
   } catch {
-    sendJson(res, { error: "Site not found" }, 404);
+    sendJson(res, { error: "Site not found" }, 404, req);
   }
 }
 
-async function handleAgentPrompt(siteName: string, res: ServerResponse) {
+async function handleAgentPrompt(siteName: string, req: IncomingMessage, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
+  assertInsideDataDir(siteDir);
   try {
     const files = await readdir(siteDir);
     const captureFiles = files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
 
     if (captureFiles.length === 0) {
-      return sendJson(res, { error: "No capture files found" }, 400);
+      return sendJson(res, { error: "No capture files found" }, 400, req);
     }
 
     const componentsPath = join(siteDir, "components.html");
@@ -526,58 +570,67 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
       optimizedPaths,
       componentsPath,
       instructionsPath: join(siteDir, "instructions.md"),
-    });
+    }, 200, req);
   } catch (err: any) {
-    sendJson(res, { error: err.message }, 500);
+    sendJson(res, { error: "Failed to generate prompt" }, 500, req);
   }
 }
 
-async function handlePreview(siteName: string, filename: string, res: ServerResponse) {
+async function handlePreview(siteName: string, filename: string, req: IncomingMessage, res: ServerResponse) {
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "");
+  const siteDir = join(DATA_DIR, siteName);
+  assertInsideDataDir(siteDir);
 
   // Try the exact filename first, then fall back to capture- prefix
-  let filePath = join(DATA_DIR, siteName, safe);
+  let filePath = join(siteDir, safe);
   if (!existsSync(filePath)) {
     // If requesting rendered-*, try the capture- version instead (no more separate rendered files)
     const captureName = safe.replace(/^rendered-/, "capture-");
-    filePath = join(DATA_DIR, siteName, captureName);
+    filePath = join(siteDir, captureName);
   }
 
   if (!existsSync(filePath)) {
-    return send404(res);
+    return send404(res, "Not found", req);
   }
   const content = await readFile(filePath);
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Security-Policy": "sandbox allow-same-origin; default-src 'none'; style-src 'unsafe-inline' *; img-src * data:; font-src *;",
+  });
   res.end(content);
 }
 
-async function handleDeletePage(siteName: string, captureFile: string, res: ServerResponse) {
+async function handleDeletePage(siteName: string, captureFile: string, req: IncomingMessage, res: ServerResponse) {
   const safe = captureFile.replace(/[^a-zA-Z0-9._-]/g, "");
   const siteDir = join(DATA_DIR, siteName);
+  assertInsideDataDir(siteDir);
 
   try {
     const capPath = join(siteDir, safe);
+    assertInsideDataDir(capPath);
     if (existsSync(capPath)) await unlink(capPath);
 
     const renderedFile = safe.replace("capture-", "rendered-");
     const rendPath = join(siteDir, renderedFile);
+    assertInsideDataDir(rendPath);
     if (existsSync(rendPath)) await unlink(rendPath);
 
     console.log(`  \x1b[33m-\x1b[0m Deleted ${siteName}/${safe}`);
-    sendJson(res, { success: true });
+    sendJson(res, { success: true }, 200, req);
   } catch (err: any) {
-    sendJson(res, { error: err.message }, 500);
+    sendJson(res, { error: "Delete failed" }, 500, req);
   }
 }
 
-async function handleDeleteSite(siteName: string, res: ServerResponse) {
+async function handleDeleteSite(siteName: string, req: IncomingMessage, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
+  assertInsideDataDir(siteDir);
   try {
     await rm(siteDir, { recursive: true, force: true });
     console.log(`  \x1b[33m-\x1b[0m Deleted site ${siteName}`);
-    sendJson(res, { success: true });
+    sendJson(res, { success: true }, 200, req);
   } catch (err: any) {
-    sendJson(res, { error: err.message }, 500);
+    sendJson(res, { error: "Delete failed" }, 500, req);
   }
 }
 
@@ -585,10 +638,13 @@ async function handleDeleteSite(siteName: string, res: ServerResponse) {
 
 async function savePowerCapture(pageUrl: string, htmlData: string, title?: string) {
   const parsed = new URL(pageUrl);
-  const siteName = parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  const siteName = safeName(parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-"));
   const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
 
+  if (!siteName) throw new Error("Invalid site name");
+
   const siteDir = join(DATA_DIR, siteName);
+  assertInsideDataDir(siteDir);
   await mkdir(siteDir, { recursive: true });
 
   // Save the clean HTML — this IS the capture AND the preview (no rendering needed)
