@@ -71,44 +71,38 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-const ALLOWED_ORIGINS = new Set([
-  `http://localhost:${port}`,
-  `http://127.0.0.1:${port}`,
-]);
+// Only browser requests from the local dashboard/tooling are allowed cross-origin.
+// The Chrome extension talks to the server via host_permissions, so it does not
+// depend on these headers. A permissive wildcard here would let any visited site
+// drive the local API (e.g. delete captures) from the user's browser.
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const allowedOrigin = new WeakMap<ServerResponse, string>();
 
-function getAllowedOrigin(req?: IncomingMessage): string {
-  const origin = req?.headers?.origin || "";
-  // Allow localhost and chrome extensions
-  if (ALLOWED_ORIGINS.has(origin) || origin.startsWith("chrome-extension://")) {
-    return origin;
-  }
-  // Default to self for same-origin requests (no Origin header)
-  return `http://localhost:${port}`;
-}
-
-function corsHeaders(req?: IncomingMessage): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": getAllowedOrigin(req),
+function corsHeaders(res: ServerResponse): Record<string, string> {
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Vary": "Origin",
+    Vary: "Origin",
   };
+  const origin = allowedOrigin.get(res);
+  if (origin) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
 }
 
-function sendJson(res: ServerResponse, data: unknown, status = 200, req?: IncomingMessage) {
+function sendJson(res: ServerResponse, data: unknown, status = 200) {
   const body = JSON.stringify(data);
-  const headers = { ...corsHeaders(req), "Content-Type": "application/json; charset=utf-8" };
+  const headers = { ...corsHeaders(res), "Content-Type": "application/json; charset=utf-8" };
   res.writeHead(status, headers);
   res.end(body);
 }
 
-function sendText(res: ServerResponse, text: string, contentType: string, status = 200, extra: Record<string, string> = {}, req?: IncomingMessage) {
-  res.writeHead(status, { ...corsHeaders(req), "Content-Type": contentType, ...extra });
+function sendText(res: ServerResponse, text: string, contentType: string, status = 200, extra: Record<string, string> = {}) {
+  res.writeHead(status, { ...corsHeaders(res), "Content-Type": contentType, ...extra });
   res.end(text);
 }
 
-function send404(res: ServerResponse, message = "Not found", req?: IncomingMessage) {
-  res.writeHead(404, corsHeaders(req));
+function send404(res: ServerResponse, message = "Not found") {
+  res.writeHead(404, corsHeaders(res));
   res.end(message);
 }
 
@@ -147,8 +141,14 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
   const method = req.method || "GET";
 
+  // Store allowed origin on the response for corsHeaders() to use
+  const reqOrigin = req.headers.origin;
+  if (reqOrigin && LOCAL_ORIGIN.test(reqOrigin)) {
+    allowedOrigin.set(res, reqOrigin);
+  }
+
   if (method === "OPTIONS") {
-    res.writeHead(204, corsHeaders(req));
+    res.writeHead(204, corsHeaders(res));
     res.end();
     return;
   }
@@ -171,7 +171,7 @@ const server = createServer(async (req, res) => {
     // ─── Health ───────────────────────────────
 
     if (path === "/health") {
-      return sendJson(res, { status: "ok", version: "2.0" }, 200, req);
+      return sendJson(res, { status: "ok", version: "2.0" });
     }
 
     // ─── Capture (from extension) ─────────────
@@ -183,17 +183,17 @@ const server = createServer(async (req, res) => {
     // ─── API: List sites with detail ──────────
 
     if ((path === "/api/sites" || path === "/sites") && method === "GET") {
-      return await handleListSites(req, res);
+      return await handleListSites(res);
     }
 
     // ─── API: Site detail ─────────────────────
 
     const siteMatch = path.match(/^\/api\/sites\/([^/]+)$/);
     if (siteMatch && method === "GET") {
-      return await handleSiteDetail(safeName(siteMatch[1]!), req, res);
+      return await handleSiteDetail(safeName(siteMatch[1]!), res);
     }
     if (siteMatch && method === "DELETE") {
-      return await handleDeleteSite(safeName(siteMatch[1]!), req, res);
+      return await handleDeleteSite(safeName(siteMatch[1]!), res);
     }
 
     // ─── API: components.html ────────
@@ -205,9 +205,9 @@ const server = createServer(async (req, res) => {
       assertInsideDataDir(filePath);
       if (existsSync(filePath)) {
         const content = await readFile(filePath, "utf-8");
-        sendText(res, content, "text/html; charset=utf-8", 200, {}, req);
+        sendText(res, content, "text/html; charset=utf-8");
       } else {
-        send404(res, "Not found", req);
+        send404(res);
       }
       return;
     }
@@ -224,9 +224,9 @@ const server = createServer(async (req, res) => {
       const filePath = existsSync(siteInstr) ? siteInstr : globalInstr;
       if (existsSync(filePath)) {
         const content = await readFile(filePath, "utf-8");
-        sendText(res, content, "text/plain; charset=utf-8", 200, {}, req);
+        sendText(res, content, "text/plain; charset=utf-8");
       } else {
-        send404(res, "Not found", req);
+        send404(res);
       }
       return;
     }
@@ -236,27 +236,27 @@ const server = createServer(async (req, res) => {
 
     const agentPromptMatch = path.match(/^\/api\/sites\/([^/]+)\/agent-prompt$/);
     if (agentPromptMatch && method === "GET") {
-      return await handleAgentPrompt(safeName(agentPromptMatch[1]!), req, res);
+      return await handleAgentPrompt(safeName(agentPromptMatch[1]!), res);
     }
 
     // ─── API: Preview rendered HTML ───────────
 
     const previewMatch = path.match(/^\/api\/sites\/([^/]+)\/preview\/(.+)$/);
     if (previewMatch && method === "GET") {
-      return await handlePreview(safeName(previewMatch[1]!), previewMatch[2]!, req, res);
+      return await handlePreview(safeName(previewMatch[1]!), previewMatch[2]!, res);
     }
 
     // ─── API: Delete a capture ────────────────
 
     const deleteMatch = path.match(/^\/api\/sites\/([^/]+)\/pages\/(.+)$/);
     if (deleteMatch && method === "DELETE") {
-      return await handleDeletePage(safeName(deleteMatch[1]!), deleteMatch[2]!, req, res);
+      return await handleDeletePage(safeName(deleteMatch[1]!), deleteMatch[2]!, res);
     }
 
-    sendJson(res, { error: "Not found" }, 404, req);
+    sendJson(res, { error: "Not found" }, 404);
   } catch (err: any) {
     console.error("Server error:", err);
-    sendJson(res, { error: "Internal server error" }, 500, req);
+    sendJson(res, { error: "Internal server error" }, 500);
   }
 });
 
@@ -283,7 +283,7 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
     };
 
     if (!body.url || !body.data) {
-      return sendJson(res, { error: "Missing url or data" }, 400, req);
+      return sendJson(res, { error: "Missing url or data" }, 400);
     }
 
     // New power capture: clean HTML with CSS inlined, scripts stripped
@@ -295,19 +295,19 @@ async function handleCapture(req: IncomingMessage, res: ServerResponse) {
         site: result.siteName,
         filename: result.filename,
         sizeKB: result.sizeKB,
-      }, 200, req);
+      });
       return;
     }
 
     // Unknown capture type
-    sendJson(res, { error: "Unknown capture type. Use the latest extension." }, 400, req);
+    sendJson(res, { error: "Unknown capture type. Use the latest extension." }, 400);
   } catch (err: any) {
     console.log(`  \x1b[31mx\x1b[0m Error: ${err.message}`);
-    sendJson(res, { error: "Capture failed" }, 500, req);
+    sendJson(res, { error: "Capture failed" }, 500);
   }
 }
 
-async function handleListSites(req: IncomingMessage, res: ServerResponse) {
+async function handleListSites(res: ServerResponse) {
   try {
     const entries = await readdir(DATA_DIR, { withFileTypes: true });
     const sites = [];
@@ -349,13 +349,13 @@ async function handleListSites(req: IncomingMessage, res: ServerResponse) {
     }
 
     sites.sort((a, b) => a.name.localeCompare(b.name));
-    sendJson(res, { sites }, 200, req);
+    sendJson(res, { sites });
   } catch {
-    sendJson(res, { sites: [] }, 200, req);
+    sendJson(res, { sites: [] });
   }
 }
 
-async function handleSiteDetail(siteName: string, req: IncomingMessage, res: ServerResponse) {
+async function handleSiteDetail(siteName: string, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
   assertInsideDataDir(siteDir);
   try {
@@ -364,13 +364,13 @@ async function handleSiteDetail(siteName: string, req: IncomingMessage, res: Ser
       name: siteName,
       files,
       hasDesignMd: files.includes("design.md"),
-    }, 200, req);
+    });
   } catch {
-    sendJson(res, { error: "Site not found" }, 404, req);
+    sendJson(res, { error: "Site not found" }, 404);
   }
 }
 
-async function handleAgentPrompt(siteName: string, req: IncomingMessage, res: ServerResponse) {
+async function handleAgentPrompt(siteName: string, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
   assertInsideDataDir(siteDir);
   try {
@@ -378,7 +378,7 @@ async function handleAgentPrompt(siteName: string, req: IncomingMessage, res: Se
     const captureFiles = files.filter((f) => f.startsWith("capture-") && f.endsWith(".html"));
 
     if (captureFiles.length === 0) {
-      return sendJson(res, { error: "No capture files found" }, 400, req);
+      return sendJson(res, { error: "No capture files found" }, 400);
     }
 
     const componentsPath = join(siteDir, "components.html");
@@ -570,13 +570,13 @@ async function handleAgentPrompt(siteName: string, req: IncomingMessage, res: Se
       optimizedPaths,
       componentsPath,
       instructionsPath: join(siteDir, "instructions.md"),
-    }, 200, req);
+    });
   } catch (err: any) {
-    sendJson(res, { error: "Failed to generate prompt" }, 500, req);
+    sendJson(res, { error: "Failed to generate prompt" }, 500);
   }
 }
 
-async function handlePreview(siteName: string, filename: string, req: IncomingMessage, res: ServerResponse) {
+async function handlePreview(siteName: string, filename: string, res: ServerResponse) {
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "");
   const siteDir = join(DATA_DIR, siteName);
   assertInsideDataDir(siteDir);
@@ -590,7 +590,7 @@ async function handlePreview(siteName: string, filename: string, req: IncomingMe
   }
 
   if (!existsSync(filePath)) {
-    return send404(res, "Not found", req);
+    return send404(res);
   }
   const content = await readFile(filePath);
   res.writeHead(200, {
@@ -600,7 +600,7 @@ async function handlePreview(siteName: string, filename: string, req: IncomingMe
   res.end(content);
 }
 
-async function handleDeletePage(siteName: string, captureFile: string, req: IncomingMessage, res: ServerResponse) {
+async function handleDeletePage(siteName: string, captureFile: string, res: ServerResponse) {
   const safe = captureFile.replace(/[^a-zA-Z0-9._-]/g, "");
   const siteDir = join(DATA_DIR, siteName);
   assertInsideDataDir(siteDir);
@@ -616,21 +616,21 @@ async function handleDeletePage(siteName: string, captureFile: string, req: Inco
     if (existsSync(rendPath)) await unlink(rendPath);
 
     console.log(`  \x1b[33m-\x1b[0m Deleted ${siteName}/${safe}`);
-    sendJson(res, { success: true }, 200, req);
+    sendJson(res, { success: true });
   } catch (err: any) {
-    sendJson(res, { error: "Delete failed" }, 500, req);
+    sendJson(res, { error: "Delete failed" }, 500);
   }
 }
 
-async function handleDeleteSite(siteName: string, req: IncomingMessage, res: ServerResponse) {
+async function handleDeleteSite(siteName: string, res: ServerResponse) {
   const siteDir = join(DATA_DIR, siteName);
   assertInsideDataDir(siteDir);
   try {
     await rm(siteDir, { recursive: true, force: true });
     console.log(`  \x1b[33m-\x1b[0m Deleted site ${siteName}`);
-    sendJson(res, { success: true }, 200, req);
+    sendJson(res, { success: true });
   } catch (err: any) {
-    sendJson(res, { error: "Delete failed" }, 500, req);
+    sendJson(res, { error: "Delete failed" }, 500);
   }
 }
 
@@ -657,4 +657,3 @@ async function savePowerCapture(pageUrl: string, htmlData: string, title?: strin
     sizeKB: (htmlData.length / 1024).toFixed(0),
   };
 }
-
