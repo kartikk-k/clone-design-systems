@@ -14,7 +14,6 @@ import { homedir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { mkdir, readdir, stat, unlink, cp, rm, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-// Legacy imports removed — no longer using Figma figh2d capture/render pipeline
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Package root: when running from dist/server.mjs, go up one level
@@ -190,7 +189,6 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // (design.md routes removed — replaced by components.html + instructions.md)
 
     // ─── API: Agent prompt for design.md ───────
 
@@ -604,4 +602,3 @@ async function savePowerCapture(pageUrl: string, htmlData: string, title?: strin
   };
 }
 
-// Legacy saveAndRender removed — all captures now use savePowerCapture

@@ -142,19 +142,6 @@ async function loadSites() {
   }
 }
 
-// loadDesignMd removed — replaced by components.html
-
-async function generateDesignMd(siteName) {
-  try {
-    const res = await fetch(`${API}/api/sites/${siteName}/generate-design-md`, { method: "POST" });
-    if (!res.ok) throw new Error("Generation failed");
-    const data = await res.json();
-    return data;
-  } catch (e) {
-    showToast("Failed to generate design.md: " + e.message, "error");
-    return null;
-  }
-}
 
 async function deleteCapture(siteName, filename) {
   try {
@@ -498,53 +485,6 @@ async function confirmDeletePage(siteName, captureFile) {
   }
 }
 
-// ─── Design.md tab ──────────────────────────────
-
-async function renderDesignMdTab(site) {
-  const container = document.createElement("div");
-  container.className = "panel-block";
-
-  const content = document.createElement("div");
-  content.className = "design-md-content design-md-box md-rendered";
-  content.innerHTML = `<span class="md-section-meta">Loading...</span>`;
-  container.appendChild(content);
-
-  siteContent.appendChild(container);
-
-  const md = await loadDesignMd(site.name);
-
-  if (md) {
-    // Section header with secondary actions + size info
-    const header = document.createElement("div");
-    header.className = "md-section-header";
-    header.innerHTML = `
-      <span class="md-section-label">design.md</span>
-      <span class="md-section-meta">${(md.length / 1024).toFixed(1)} KB</span>
-    `;
-    container.insertBefore(header, content);
-
-    content.className = "design-md-content design-md-box md-rendered";
-    content.innerHTML = renderMarkdown(md);
-  } else {
-    content.className = "panel-block";
-    content.innerHTML = "";
-
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.innerHTML = `
-      <div class="empty-state-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      </div>
-      <div class="empty-state-title">No design.md yet</div>
-      <div class="empty-state-desc">Generate a complete design system specification from your captured pages. Copy the agent prompt and paste it into Claude or any AI agent.</div>
-      <div class="empty-state-actions">
-        <button type="button" class="${BTN_PRIMARY}" onclick="copyAgentPrompt('${site.name}')">Generate with agent</button>
-      </div>
-    `;
-    content.appendChild(empty);
-  }
-}
-
 // ─── Components tab ──────────────────────────────
 
 async function renderComponentsTab(site) {
@@ -608,13 +548,6 @@ async function renderComponentsTab(site) {
   }
 }
 
-async function copyDesignMd(siteName) {
-  const md = await loadDesignMd(siteName);
-  if (!md) return showToast("No design.md to copy", "error");
-  await navigator.clipboard.writeText(md);
-  showToast("Copied design.md to clipboard", "success");
-}
-
 function copyAddCommand(siteName) {
   const cmd = `npx designgrab add ${siteName}`;
   navigator.clipboard.writeText(cmd).then(() => {
@@ -648,19 +581,6 @@ async function copyAgentPrompt(siteName) {
   }
 }
 
-async function regenerateDesignMd(siteName) {
-  showToast("Generating design.md...", "success");
-  const result = await generateDesignMd(siteName);
-  if (result) {
-    showToast(`Generated design.md (${result.sizeKB}KB)`, "success");
-    await loadSites();
-    if (currentSite?.name === siteName) {
-      currentSite = sites.find((s) => s.name === siteName) || currentSite;
-      switchTab("design-md");
-    }
-  }
-}
-
 async function refreshSite() {
   await loadSites();
   if (currentSite) {
@@ -670,75 +590,6 @@ async function refreshSite() {
       renderSiteDetail();
     }
   }
-}
-
-// ─── Markdown renderer (simple) ─────────────────
-
-function renderMarkdown(md) {
-  let html = escapeHtml(md);
-
-  // Code blocks
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    return `<pre><code>${code.trim()}</code></pre>`;
-  });
-
-  // Inline code
-  html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
-
-  // Headers
-  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
-  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
-  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
-
-  // Blockquotes
-  html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
-
-  // Tables
-  html = html.replace(/(\|.+\|\n\|[-| :]+\|\n(?:\|.+\|\n?)*)/g, (table) => {
-    const rows = table.trim().split("\n");
-    if (rows.length < 2) return table;
-
-    const headers = rows[0].split("|").filter((c) => c.trim());
-    const body = rows.slice(2);
-
-    let t = "<table><thead><tr>";
-    for (const h of headers) t += `<th>${h.trim()}</th>`;
-    t += "</tr></thead><tbody>";
-
-    for (const row of body) {
-      const cells = row.split("|").filter((c) => c.trim());
-      t += "<tr>";
-      for (const c of cells) t += `<td>${c.trim()}</td>`;
-      t += "</tr>";
-    }
-    t += "</tbody></table>";
-    return t;
-  });
-
-  // Bold
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-
-  // Italic
-  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-
-  // Lists
-  html = html.replace(/^- (.+)$/gm, "<li>$1</li>");
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`);
-
-  // Horizontal rules
-  html = html.replace(/^---$/gm, "<hr>");
-
-  // Paragraphs — wrap loose lines
-  html = html.replace(/\n\n/g, "</p><p>");
-
-  return html;
-}
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 // ─── Toast ──────────────────────────────────────
