@@ -59,28 +59,46 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
+// Only browser requests from the local dashboard/tooling are allowed cross-origin.
+// The Chrome extension talks to the server via host_permissions, so it does not
+// depend on these headers. A permissive wildcard here would let any visited site
+// drive the local API (e.g. delete captures) from the user's browser.
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const allowedOrigin = new WeakMap<ServerResponse, string>();
+
+function corsHeaders(res: ServerResponse): Record<string, string> {
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
   };
+  const origin = allowedOrigin.get(res);
+  if (origin) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
+}
+
+// Site directories are always a single path segment under DATA_DIR. Validating the
+// name prevents path traversal (e.g. "..") from escaping DATA_DIR.
+const VALID_SITE_NAME = /^[a-z0-9-]+$/;
+
+function isValidSiteName(name: string): boolean {
+  return VALID_SITE_NAME.test(name);
 }
 
 function sendJson(res: ServerResponse, data: unknown, status = 200) {
   const body = JSON.stringify(data);
-  const headers = { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8" };
+  const headers = { ...corsHeaders(res), "Content-Type": "application/json; charset=utf-8" };
   res.writeHead(status, headers);
   res.end(body);
 }
 
 function sendText(res: ServerResponse, text: string, contentType: string, status = 200, extra: Record<string, string> = {}) {
-  res.writeHead(status, { ...corsHeaders(), "Content-Type": contentType, ...extra });
+  res.writeHead(status, { ...corsHeaders(res), "Content-Type": contentType, ...extra });
   res.end(text);
 }
 
 function send404(res: ServerResponse, message = "Not found") {
-  res.writeHead(404, corsHeaders());
+  res.writeHead(404, corsHeaders(res));
   res.end(message);
 }
 
@@ -110,8 +128,13 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
   const method = req.method || "GET";
 
+  const reqOrigin = req.headers.origin;
+  if (reqOrigin && LOCAL_ORIGIN.test(reqOrigin)) {
+    allowedOrigin.set(res, reqOrigin);
+  }
+
   if (method === "OPTIONS") {
-    res.writeHead(204, corsHeaders());
+    res.writeHead(204, corsHeaders(res));
     res.end();
     return;
   }
@@ -163,6 +186,7 @@ const server = createServer(async (req, res) => {
 
     const componentsMatch = path.match(/^\/api\/sites\/([^/]+)\/components$/);
     if (componentsMatch && method === "GET") {
+      if (!isValidSiteName(componentsMatch[1]!)) return sendJson(res, { error: "Invalid site name" }, 400);
       const filePath = join(DATA_DIR, componentsMatch[1]!, "components.html");
       if (existsSync(filePath)) {
         const content = await readFile(filePath, "utf-8");
@@ -177,6 +201,7 @@ const server = createServer(async (req, res) => {
 
     const instructionsMatch = path.match(/^\/api\/sites\/([^/]+)\/instructions$/);
     if (instructionsMatch && method === "GET") {
+      if (!isValidSiteName(instructionsMatch[1]!)) return sendJson(res, { error: "Invalid site name" }, 400);
       // Try site-specific instructions first, then global
       const siteInstr = join(DATA_DIR, instructionsMatch[1]!, "instructions.md");
       const globalInstr = join(PKG_ROOT, "scripts", "prompts", "agent-instructions.md");
@@ -316,6 +341,7 @@ async function handleListSites(res: ServerResponse) {
 }
 
 async function handleSiteDetail(siteName: string, res: ServerResponse) {
+  if (!isValidSiteName(siteName)) return sendJson(res, { error: "Invalid site name" }, 400);
   const siteDir = join(DATA_DIR, siteName);
   try {
     const files = await readdir(siteDir);
@@ -330,6 +356,7 @@ async function handleSiteDetail(siteName: string, res: ServerResponse) {
 }
 
 async function handleAgentPrompt(siteName: string, res: ServerResponse) {
+  if (!isValidSiteName(siteName)) return sendJson(res, { error: "Invalid site name" }, 400);
   const siteDir = join(DATA_DIR, siteName);
   try {
     const files = await readdir(siteDir);
@@ -535,6 +562,7 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
 }
 
 async function handlePreview(siteName: string, filename: string, res: ServerResponse) {
+  if (!isValidSiteName(siteName)) return sendJson(res, { error: "Invalid site name" }, 400);
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "");
 
   // Try the exact filename first, then fall back to capture- prefix
@@ -554,6 +582,7 @@ async function handlePreview(siteName: string, filename: string, res: ServerResp
 }
 
 async function handleDeletePage(siteName: string, captureFile: string, res: ServerResponse) {
+  if (!isValidSiteName(siteName)) return sendJson(res, { error: "Invalid site name" }, 400);
   const safe = captureFile.replace(/[^a-zA-Z0-9._-]/g, "");
   const siteDir = join(DATA_DIR, siteName);
 
@@ -573,6 +602,7 @@ async function handleDeletePage(siteName: string, captureFile: string, res: Serv
 }
 
 async function handleDeleteSite(siteName: string, res: ServerResponse) {
+  if (!isValidSiteName(siteName)) return sendJson(res, { error: "Invalid site name" }, 400);
   const siteDir = join(DATA_DIR, siteName);
   try {
     await rm(siteDir, { recursive: true, force: true });
