@@ -638,7 +638,7 @@ async function handleDeleteSite(siteName: string, res: ServerResponse) {
 
 async function savePowerCapture(pageUrl: string, htmlData: string, title?: string) {
   const parsed = new URL(pageUrl);
-  const siteName = safeName(parsed.hostname.replace(/^www\./, "").split(".")[0]!.toLowerCase().replace(/[^a-z0-9]/g, "-"));
+  const siteName = safeName(parsed.hostname.replace(/^www\./, "").toLowerCase());
   const pathSlug = parsed.pathname.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
 
   if (!siteName) throw new Error("Invalid site name");
