@@ -339,76 +339,193 @@ async function handleAgentPrompt(siteName: string, res: ServerResponse) {
       return sendJson(res, { error: "No capture files found" }, 400);
     }
 
-    const capturePaths = captureFiles.map((f) => join(siteDir, f));
     const componentsPath = join(siteDir, "components.html");
-    const promptFilePath = join(PKG_ROOT, "scripts", "prompts", "generate-components.md");
-
-    // Read the component generation prompt
-    let componentPrompt = "";
-    try {
-      componentPrompt = await readFile(promptFilePath, "utf-8");
-    } catch {
-      componentPrompt = "See the generate-components.md prompt file for full instructions.";
-    }
 
     // Read the agent instructions
-    const instructionsPath = join(PKG_ROOT, "scripts", "prompts", "agent-instructions.md");
+    const agentInstructionsPath = join(PKG_ROOT, "scripts", "prompts", "agent-instructions.md");
     let agentInstructions = "";
     try {
-      agentInstructions = await readFile(instructionsPath, "utf-8");
+      agentInstructions = await readFile(agentInstructionsPath, "utf-8");
     } catch {}
 
-    const designSystemPath = join(siteDir, "design-system.html");
+    // ─── Pre-extract data server-side so the agent doesn't have to read files ───
+    const { createHash } = await import("node:crypto");
 
+    // Collect ALL unique CSS vars across all pages
+    const allCSSVars: Record<string, string> = {};
+    let htmlTagVars = "";
+    const pageOutlines: { file: string; texts: string[]; size: number }[] = [];
+
+    // Generate optimized files AND extract data in one pass
+    const optimizedPaths: string[] = [];
+
+    for (const f of captureFiles) {
+      const capPath = join(siteDir, f);
+      const optName = f.replace("capture-", "optimized-");
+      const optPath = join(siteDir, optName);
+
+      try {
+        let html = await readFile(capPath, "utf-8");
+
+        // Extract html tag vars (once)
+        if (!htmlTagVars) {
+          const hm = html.match(/<html[^>]*style="([^"]*)"/);
+          if (hm) htmlTagVars = hm[1]!;
+        }
+
+        // Extract CSS vars from all style blocks
+        const styleBlocks = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
+        for (const block of styleBlocks) {
+          const content = block.replace(/<\/?style[^>]*>/gi, "");
+          const vars = content.match(/(--[a-zA-Z0-9_-]+)\s*:\s*([^;}{]+)/g) || [];
+          for (const v of vars) {
+            const [name, ...valParts] = v.split(":");
+            if (name && valParts.length) {
+              const key = name.trim();
+              const val = valParts.join(":").trim();
+              if (!allCSSVars[key] || val.length > allCSSVars[key]!.length) {
+                allCSSVars[key] = val;
+              }
+            }
+          }
+        }
+
+        // Extract page outline (texts only, for component inventory)
+        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        const body = bodyMatch ? bodyMatch[1]! : "";
+        const stripped = body
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+        const texts = (stripped.match(/>([^<]{2,})</g) || [])
+          .map((t: string) => t.slice(1, -1).trim())
+          .filter((t: string) => t && t.length > 1 && !t.startsWith("{"));
+        pageOutlines.push({ file: f, texts: texts.slice(0, 30), size: html.length });
+
+        // Optimize the file
+        html = html.replace(/data:image\/[^"')\s]+/g, "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E");
+        const seenCSS = new Set<string>();
+        html = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (fullMatch: string, cssContent: string) => {
+          const hash = createHash("md5").update(cssContent).digest("hex");
+          if (seenCSS.has(hash)) return "";
+          seenCSS.add(hash);
+          return fullMatch;
+        });
+        html = html.replace(/<link[^>]*rel="modulepreload"[^>]*>/gi, "");
+
+        await writeFile(optPath, html, "utf-8");
+        optimizedPaths.push(optPath);
+      } catch {
+        optimizedPaths.push(join(siteDir, f));
+      }
+    }
+
+    // Categorize CSS vars
+    const colorVars: string[] = [];
+    const spacingVars: string[] = [];
+    const fontVars: string[] = [];
+    for (const [k, v] of Object.entries(allCSSVars)) {
+      const line = `${k}: ${v}`;
+      if (/color|bg|border|text|shadow|accent|brand|fill|stroke|foreground|background/i.test(k)) {
+        colorVars.push(line);
+      } else if (/spacing|gap|padding|margin|radius|size|height|width/i.test(k)) {
+        spacingVars.push(line);
+      } else if (/font|line-height|letter|weight/i.test(k)) {
+        fontVars.push(line);
+      }
+    }
+
+    // Build the prompt with pre-extracted data
     const prompt = [
-      `You have captured HTML files for the "${siteName}" website. Complete these steps:`,
+      `Generate a components.html file for the "${siteName}" website.`,
+      `ALL data has been pre-extracted. Do NOT run Python scripts. Do NOT read files for extraction.`,
+      `You ONLY need to read specific HTML files when you need the EXACT SVG icon or component structure.`,
       ``,
-      `## Step 1: Generate components.html`,
+      `## PRE-EXTRACTED DATA (use this directly)`,
       ``,
-      `Read ALL the captured HTML files below. These are self-contained HTML files with all CSS inlined and scripts stripped.`,
-      `Extract EVERY unique UI component from the pages and recreate each one using clean Tailwind CSS.`,
+      `### HTML Theme Variables`,
+      `\`\`\``,
+      htmlTagVars,
+      `\`\`\``,
       ``,
-      `CRITICAL: Do NOT fabricate any content. Only use text, icons, labels, and content that EXIST in the source HTML files.`,
+      `### Color Variables (${colorVars.length} found across ${captureFiles.length} pages)`,
+      `\`\`\``,
+      ...colorVars.slice(0, 60),
+      `\`\`\``,
       ``,
-      `${componentPrompt}`,
+      `### Spacing Variables`,
+      `\`\`\``,
+      ...spacingVars.slice(0, 30),
+      `\`\`\``,
       ``,
-      `Captured HTML files (read ALL of these):`,
-      ...capturePaths.map((p) => `  ${p}`),
+      `### Font Variables`,
+      `\`\`\``,
+      ...fontVars.slice(0, 20),
+      `\`\`\``,
       ``,
-      `Save the components file to: ${componentsPath}`,
+      `### Page Inventory (${pageOutlines.length} pages)`,
+      ...pageOutlines.map(p => `- **${p.file}** (${(p.size/1024).toFixed(0)}KB): ${p.texts.slice(0, 10).join(", ")}`),
       ``,
-      `## Step 2: Generate design-system.html`,
+      `### Optimized HTML files (for targeted component/SVG extraction ONLY):`,
+      ...optimizedPaths.map(p => `  ${p}`),
       ``,
-      `After creating components.html, generate a design-system.html file that documents the complete design system.`,
-      `This should be a standalone HTML file (using Tailwind CSS browser CDN) that shows:`,
+      `## YOUR TASK`,
       ``,
-      `- **Color Palette** — every unique color as visual swatches with exact values (hex, rgb, lch, oklch — whatever the source uses)`,
-      `- **Typography Scale** — every font size/weight/line-height combination rendered as text samples`,
-      `- **Spacing Scale** — visual representation of padding/gap/margin values used`,
-      `- **Border Radius Scale** — visual examples of each radius value`,
-      `- **Shadows** — visual examples of each box-shadow`,
-      `- **Icon Set** — all icons used, rendered at their sizes`,
-      `- **Component Recipes** — for EACH component, show: the Tailwind classes needed, a rendered preview, and copy-paste HTML`,
+      `Generate the components.html file using PARALLEL sub-agents. Launch these ALL AT ONCE:`,
       ``,
-      `This file should be a visual reference that a developer opens in a browser to see the entire design system.`,
-      `Use the EXACT values from components.html — do NOT approximate or use generic Tailwind classes.`,
+      `1. **Sub-agent: Layouts** — Read 2-3 HTML files to extract page layout structures (sidebar+main, settings, detail views). Write to ${join(siteDir, "_section-layouts.html")}`,
+      `2. **Sub-agent: Colors + Typography** — Use the pre-extracted CSS vars above. No file reads needed. Write to ${join(siteDir, "_section-colors-typo.html")}`,
+      `3. **Sub-agent: Navigation + Sidebar** — Read ONE file (home) for sidebar SVGs. Write to ${join(siteDir, "_section-nav.html")}`,
+      `4. **Sub-agent: Buttons + Forms + Controls** — Read settings files for toggles, inputs, selects. Write to ${join(siteDir, "_section-controls.html")}`,
+      `5. **Sub-agent: Cards + Lists + Content** — Read plugins, tasks, chat files. Write to ${join(siteDir, "_section-content.html")}`,
       ``,
-      `Save to: ${designSystemPath}`,
+      `Each sub-agent writes a plain HTML fragment (just the component sections, no <html>/<head>/<body> wrapper).`,
       ``,
-      `## Step 3: Save instructions.md`,
+      `After ALL sub-agents complete, assemble the final file:`,
       ``,
-      `Save the following instructions file. These tell AI agents how to use the design system.`,
+      `\`\`\`bash`,
+      `cat << 'HEADER' > ${componentsPath}`,
+      `<!DOCTYPE html>`,
+      `<html class="dark">`,
+      `<head>`,
+      `<meta charset="UTF-8">`,
+      `<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>`,
+      `<style type="text/tailwindcss">`,
+      `@theme {`,
+      `  /* Color tokens will be filled from sub-agent 2 output */`,
+      `}`,
+      `</style>`,
+      `</head>`,
+      `<body class="bg-[var(--page-bg)] text-[var(--text-primary)] p-6" style="font-family: FONT_FROM_VARS">`,
+      `HEADER`,
+      `cat ${join(siteDir, "_section-layouts.html")} >> ${componentsPath}`,
+      `cat ${join(siteDir, "_section-colors-typo.html")} >> ${componentsPath}`,
+      `cat ${join(siteDir, "_section-nav.html")} >> ${componentsPath}`,
+      `cat ${join(siteDir, "_section-controls.html")} >> ${componentsPath}`,
+      `cat ${join(siteDir, "_section-content.html")} >> ${componentsPath}`,
+      `echo '</body></html>' >> ${componentsPath}`,
+      `\`\`\``,
       ``,
-      `Save to: ${join(siteDir, "instructions.md")}`,
+      `Then update the @theme block in the assembled file with the actual color tokens from the Colors sub-agent output.`,
       ``,
-      `--- BEGIN INSTRUCTIONS ---`,
+      `## RULES`,
+      `- NEVER fabricate content — every word from source`,
+      `- NEVER use generic Tailwind colors — use exact values from CSS vars`,
+      `- NEVER strip or approximate SVG icons — copy EXACT <svg> with all <path d="..."> from source files`,
+      `- If you cannot find an SVG, use <!-- icon: NAME --> placeholder, do NOT guess`,
+      `- Full width layout, left aligned, no centering`,
+      `- No wrapper borders around sections`,
+      ``,
+      `## ALSO SAVE:`,
+      `Save instructions file to: ${join(siteDir, "instructions.md")}`,
+      `Content:`,
+      `--- BEGIN ---`,
       agentInstructions,
-      `--- END INSTRUCTIONS ---`,
+      `--- END ---`,
     ].join("\n");
 
     sendJson(res, {
       prompt,
-      capturePaths,
+      optimizedPaths,
       componentsPath,
       instructionsPath: join(siteDir, "instructions.md"),
     });
