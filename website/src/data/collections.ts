@@ -42,15 +42,31 @@ export function collectionLogoFilter(entry: Pick<CollectionEntry, "logoInvert">)
   return entry.logoInvert === false ? undefined : "brightness(0) invert(1)";
 }
 
-export const DESIGNGRAB_DATA_BASE =
-  "https://github.com/nicepkg/designgrab/blob/main/.data";
+export const REGISTRY_BASE =
+  "https://github.com/kartikk-k/designgrab/blob/main/registry";
 
+export const REGISTRY_RAW_BASE =
+  "https://raw.githubusercontent.com/kartikk-k/designgrab/main/registry";
+
+export function componentsBlobUrl(slug: string) {
+  return `${REGISTRY_BASE}/${slug}/components.html`;
+}
+
+export function componentsRawUrl(slug: string) {
+  return `${REGISTRY_RAW_BASE}/${slug}/components.html`;
+}
+
+export function instructionsRawUrl(slug: string) {
+  return `${REGISTRY_RAW_BASE}/${slug}/instructions.md`;
+}
+
+// Legacy — kept for backward compat
 export function designMdBlobUrl(slug: string) {
-  return `${DESIGNGRAB_DATA_BASE}/${slug}/design.md`;
+  return `${REGISTRY_BASE}/${slug}/components.html`;
 }
 
 export function designMdRawUrl(slug: string) {
-  return `https://raw.githubusercontent.com/nicepkg/designgrab/main/.data/${slug}/design.md`;
+  return `${REGISTRY_RAW_BASE}/${slug}/components.html`;
 }
 
 export function installCommand(slug: string) {
@@ -58,7 +74,7 @@ export function installCommand(slug: string) {
 }
 
 export const POPULAR_SLUGS = [
-  "codex",
+  "codex-dark",
   "openai",
   "cursor",
   "gemini",
@@ -70,19 +86,23 @@ export const POPULAR_SLUGS = [
 export const collections: readonly CollectionEntry[] = [
   {
     name: "Codex",
-    slug: "codex",
+    slug: "codex-dark",
     category: "web-app",
     logoUrl: "/logos/codex.svg",
     logoInvert: false,
     desc: "OpenAI Codex agent experience—dark shell, minimal chrome, and clear hierarchy for code, tools, and conversation.",
     tags: ["Dark", "Developer", "Agent"],
     components: [
-      "Agent / chat layout",
-      "Code blocks & diffs",
-      "Tool call surfaces",
-      "Sidebar & file context",
-      "Status & progress indicators",
-      "Compact controls",
+      "Page layouts (sidebar+main, settings, detail)",
+      "Color palette & typography scale",
+      "Sidebar navigation with SVG icons",
+      "Chat composer & suggestion pills",
+      "Buttons (primary, secondary, ghost, icon)",
+      "Plugin cards",
+      "Settings rows with toggles & controls",
+      "Task result & diff views",
+      "Code blocks & terminal panel",
+      "Status badges & keyboard shortcuts",
     ],
   },
   {

@@ -3,26 +3,28 @@
 import { useState } from "react";
 import type { CollectionExample } from "@/data/collections";
 
-type TabId = "components" | "examples";
+type TabId = "preview" | "examples";
 
 const tabLabel: Record<TabId, string> = {
-  components: "Components",
+  preview: "Components preview",
   examples: "Live examples",
 };
 
 export function CollectionTabs({
-  components,
+  slug,
   examples,
+  rawUrl,
 }: {
-  components: readonly string[];
+  slug: string;
   examples: readonly CollectionExample[];
+  rawUrl: string;
 }) {
-  const [tab, setTab] = useState<TabId>("components");
+  const [tab, setTab] = useState<TabId>("preview");
 
   return (
     <div>
-      <div className="flex border-b" style={{ borderColor: "rgba(255, 255, 255, 0.12)", gap: "8px" }}>
-        {(["components", "examples"] as const).map((id) => (
+      <div className="flex items-center border-b" style={{ borderColor: "rgba(255, 255, 255, 0.12)", gap: "8px" }}>
+        {(["preview", "examples"] as const).map((id) => (
           <button
             key={id}
             type="button"
@@ -41,40 +43,42 @@ export function CollectionTabs({
             {tabLabel[id]}
           </button>
         ))}
+        <div style={{ marginLeft: "auto" }}>
+          <a
+            href={rawUrl}
+            download={`${slug}-components.html`}
+            className="inline-flex items-center justify-center no-underline"
+            style={{
+              height: "32px",
+              padding: "0 14px",
+              backgroundColor: "rgba(255, 255, 255, 0.08)",
+              borderRadius: "6px",
+              color: "rgba(255, 255, 255, 0.7)",
+              fontSize: "13px",
+              fontWeight: 500,
+              gap: "6px",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
+        </div>
       </div>
 
       <div style={{ paddingTop: "24px" }}>
-        {tab === "components" && (
-          <div>
-            <p
+        {tab === "preview" && (
+          <div style={{ overflow: "auto", borderRadius: "6px", backgroundColor: "#111" }}>
+            <iframe
+              src={`/api/collection/${slug}?file=components`}
+              title={`${slug} components preview`}
               style={{
-                fontSize: "14px",
-                fontWeight: 500,
-                lineHeight: "22.96px",
-                letterSpacing: "-0.14px",
-                color: "rgba(255, 255, 255, 0.6)",
-                margin: "0 0 16px",
+                width: "100%",
+                minWidth: "600px",
+                height: "80vh",
+                border: "none",
+                display: "block",
               }}
-            >
-              Highlights from this collection&apos;s design.md. Open the file for the full token set and usage notes.
-            </p>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "20px",
-                fontSize: "15px",
-                fontWeight: 500,
-                lineHeight: "26px",
-                letterSpacing: "-0.15px",
-                color: "rgba(255, 255, 255, 0.85)",
-              }}
-            >
-              {components.map((c) => (
-                <li key={c} style={{ marginBottom: "6px" }}>
-                  {c}
-                </li>
-              ))}
-            </ul>
+            />
           </div>
         )}
 
@@ -91,8 +95,7 @@ export function CollectionTabs({
                   margin: 0,
                 }}
               >
-                No live demos are listed for this collection yet. Ship something with this design.md and we can link it
-                here.
+                No live demos listed yet. Ship something with this design system and we can link it here.
               </p>
             ) : (
               examples.map((ex) => (

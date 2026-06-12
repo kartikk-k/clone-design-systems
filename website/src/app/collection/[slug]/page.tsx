@@ -9,8 +9,8 @@ import {
   collections,
   collectionLogoFilter,
   collectionLogoInitials,
-  designMdBlobUrl,
-  designMdRawUrl,
+  componentsBlobUrl,
+  componentsRawUrl,
   getCollection,
   installCommand,
 } from "@/data/collections";
@@ -50,8 +50,8 @@ export default async function CollectionDetailPage({ params }: Props) {
   }
 
   const command = installCommand(slug);
-  const rawUrl = designMdRawUrl(slug);
-  const blobUrl = designMdBlobUrl(slug);
+  const rawUrl = componentsRawUrl(slug);
+  const blobUrl = componentsBlobUrl(slug);
   const componentList = site.components ?? FALLBACK_COMPONENTS;
   const examples = site.examples ?? [];
   const logoFilter = collectionLogoFilter(site);
@@ -61,7 +61,7 @@ export default async function CollectionDetailPage({ params }: Props) {
       <Header />
 
       <section className="w-full flex justify-center" style={{ padding: "80px 32px" }}>
-        <div className="w-full" style={{ maxWidth: "800px" }}>
+        <div className="w-full" style={{ maxWidth: "1384px" }}>
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between" style={{ gap: "24px" }}>
             <div>
               <Link
@@ -185,7 +185,7 @@ export default async function CollectionDetailPage({ params }: Props) {
             <div className="flex flex-wrap shrink-0" style={{ gap: "10px" }}>
               <a
                 href={rawUrl}
-                download={`${slug}-design.md`}
+                download={`${slug}-components.html`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center no-underline"
@@ -200,7 +200,7 @@ export default async function CollectionDetailPage({ params }: Props) {
                   letterSpacing: "-0.14px",
                 }}
               >
-                Download design.md
+                Download components
               </a>
               <a
                 href={blobUrl}
@@ -246,8 +246,7 @@ export default async function CollectionDetailPage({ params }: Props) {
                 margin: "0 0 16px",
               }}
             >
-              Run this in an existing repo to pull the published <code style={{ color: "rgba(255,255,255,0.85)" }}>design.md</code>{" "}
-              for {site.name}.
+              Run this in your project to install the {site.name} design system components and instructions.
             </p>
             <CopyInstallCommand command={command} />
           </div>
@@ -260,7 +259,7 @@ export default async function CollectionDetailPage({ params }: Props) {
               padding: "24px",
             }}
           >
-            <CollectionTabs components={componentList} examples={examples} />
+            <CollectionTabs slug={slug} examples={examples} rawUrl={rawUrl} />
           </div>
         </div>
       </section>
